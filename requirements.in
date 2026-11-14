@@ -1,0 +1,14 @@
+# Top-level deps. requirements.txt is the pinned `pip freeze` of these; regenerate with:
+#   pip install -r requirements.in && pip freeze --exclude-editable > requirements.txt
+gymnasium
+stable-baselines3
+sb3-contrib
+torch  # CPU is enough; on Linux install from https://download.pytorch.org/whl/cpu
+numpy
+scipy
+pandas
+pyarrow
+optuna
+# rliable dropped: needs arch<8, which breaks on pandas 3 (the only pandas for Python 3.15). IQM + CI via scipy.
+matplotlib
+pyyaml

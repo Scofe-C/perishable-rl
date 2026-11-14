@@ -1,0 +1,14 @@
+# PROVISIONAL: capacity = round(kappa * 20 * N) until O_ref is measured (SPEC §1.1, DECISIONS.md).
+n_skus: 2
+kappa: 0.6
+capacity: 24
+shelf_life: 3
+lead_time: 2
+horizon: 30
+demand_mean: 4.0        # scalar = same for every SKU, or a list of N values
+season: [1, 1, 1, 1, 1, 1, 1]
+price: 10.0
+order_cost: 4.0
+holding_cost: 0.1
+expiry_cost: 2.0
+lost_sales_cost: 2.0

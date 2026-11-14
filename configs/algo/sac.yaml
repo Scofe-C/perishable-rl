@@ -1,0 +1,4 @@
+# Default hyperparameters for sac (before tuning). Fill from RL Zoo / Harsha et al.
+algo: sac
+policy: MlpPolicy
+hparams: {}

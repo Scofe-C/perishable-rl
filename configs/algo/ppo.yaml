@@ -1,0 +1,4 @@
+# Default hyperparameters for ppo (before tuning). Fill from RL Zoo / Harsha et al.
+algo: ppo
+policy: MlpPolicy
+hparams: {}

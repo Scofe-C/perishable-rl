@@ -1,0 +1,4 @@
+# Default hyperparameters for a2c (before tuning). Fill from RL Zoo / Harsha et al.
+algo: a2c
+policy: MlpPolicy
+hparams: {}

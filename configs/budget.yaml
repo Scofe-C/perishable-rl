@@ -1,0 +1,10 @@
+# Fairness budgets (docs/EXPERIMENTS.md). Set train_env_steps after timing one run in week 1.
+train_env_steps: null
+eval_every_env_steps: null
+n_tune_trials: 10
+seeds: [0, 1, 2, 3, 4]
+crn_root_seed: 2026
+crn_paths: {tune: 50, test: 100}
+profiles:
+  tiny: {train_env_steps: 2000}     # CI / smoke
+  smoke: {train_env_steps: 10000}   # week-1 end-to-end

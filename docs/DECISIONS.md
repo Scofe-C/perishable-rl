@@ -1,0 +1,19 @@
+# Decision log
+
+Newest first. Add an entry for each agreed change to SPEC.md, the budgets or the fairness rules.
+Format: date · who agreed · decision · why.
+
+| Date | Agreed by | Decision | Why |
+|---|---|---|---|
+| 2026-11-13 | Weibo (scaffold) — **team to confirm** | Drop `rliable`; compute IQM (`scipy.stats.trim_mean(x, 0.25)`) and bootstrap CIs (`scipy.stats.bootstrap`) ourselves | rliable pins `arch<8`, and arch 7.x crashes on import with pandas 3. No pandas 2.x exists for Python 3.15, so rliable cannot work on 3.15. The draft only gave rliable as an example. Dropping it also removes 9 transitive packages (statsmodels, formulaic, seaborn, ...) |
+| 2026-11-13 | Weibo (scaffold) — **team to confirm** | Python 3.15 for everyone (pins resolved on 3.15.2) | Homebrew 3.12 was broken on Weibo's Mac. Every pin has a macOS arm64 and Linux x86_64 cp315 wheel or a pure-Python sdist (rliable excluded), including `torch==2.15.0+cpu` |
+| 2026-11-13 | (scaffold) | pip + pinned requirements.txt (generated from requirements.in), no Docker | Nothing is deployed. Pinned deps plus `scripts/setup_linux_vm.sh` reproduce the Linux runs |
+| 2026-11-13 | (scaffold) | Pin `wrapt==2.5.2` (later moot once rliable was dropped) | `formulaic` declared `wrapt>=1.17.0rc1`, which let pip pick a `.dev` pre-release. Rule: never commit pre-release pins |
+
+## Open items for the week-1 meeting
+- [ ] Ratify SPEC.md §3 (event order) and §4 (action mappings)
+- [ ] Default cost parameters, λ, L, τ, T (SPEC §1)
+- [ ] Initial state: empty, or warm start?
+- [ ] Measure O_ref per N and fix C for κ ∈ {0.6, 1.0}
+- [ ] DummyVecEnv vs SubprocVecEnv and n_envs (`scripts/bench_vecenv.py`)
+- [ ] Training env-step budget per run (`configs/budget.yaml`), after timing one run

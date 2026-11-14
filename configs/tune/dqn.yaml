@@ -1,0 +1,2 @@
+# Optuna search space for dqn: param -> {type: float|int|categorical, low, high, log, choices}
+{}

@@ -1,0 +1,7 @@
+# Replace the placeholders with the three members' GitHub handles (each prefixed with @),
+# then turn on "Require review from Code Owners" for main.
+# Every algorithm depends on the env and the SPEC, so changes to them need all three members.
+/src/perinv/env/     MEMBER1_HANDLE MEMBER2_HANDLE MEMBER3_HANDLE
+/docs/SPEC.md        MEMBER1_HANDLE MEMBER2_HANDLE MEMBER3_HANDLE
+/configs/budget.yaml MEMBER1_HANDLE MEMBER2_HANDLE MEMBER3_HANDLE
+/data/crn/           MEMBER1_HANDLE MEMBER2_HANDLE MEMBER3_HANDLE

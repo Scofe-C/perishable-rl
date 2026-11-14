@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "perinv"
+version = "0.0.1"
+description = "Perishable multi-SKU inventory: DRL algorithm comparison vs DP and heuristics"
+requires-python = ">=3.15"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: trains models; run with -m slow"]
+addopts = "-m 'not slow'"
