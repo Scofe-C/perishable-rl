@@ -12,7 +12,7 @@ PENDING = {
     "dp: state count == C(C+L+P, L+P); tiny instance vs brute force; V[0,s0] ~ simulated DP policy": "M1",
     "action mapping: a0=-1 -> 0, a0=+1 -> R; sum <= R (hypothesis); integers; even split": "M1",
     "masking: action_masks() == capacity; MaskablePPO eval never clips": "M3",
-    "eval invariance: shuffled path order -> same per-path results (VecNormalize frozen)": "M3",
+    "sb3 adapter: VecNormalize frozen at eval (training=False, norm_reward=False), deterministic=True": "M2",
     "baselines: (s,S) and newsvendor feasible + deterministic; newsvendor <= DP for N=1": "M2",
 }
 
