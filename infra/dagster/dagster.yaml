@@ -1,0 +1,17 @@
+# Dagster instance config (DAGSTER_HOME=/app/dagster in the image). Run history lives on the data volume,
+# so it survives container restarts. No telemetry is sent.
+telemetry:
+  enabled: false
+storage:
+  sqlite:
+    base_dir: /data/dagster_home/history
+local_artifact_storage:
+  module: dagster._core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /data/dagster_home/artifacts
+compute_logs:
+  module: dagster._core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /data/dagster_home/compute_logs

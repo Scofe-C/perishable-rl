@@ -1,0 +1,20 @@
+# Host paths: data lives outside the repo (FRN_DATA_DIR, default D:/NEU/data); team runs are mounted read-only.
+services:
+  frn:
+    build: {context: ., target: base}
+    image: frn:dev-base
+    volumes:
+      - ${FRN_DATA_DIR:-D:/NEU/data}:/data
+      - ../runs:/runs:ro
+    working_dir: /app
+  test:
+    build: {context: ., target: dev}
+    image: frn:dev
+  dagster:
+    # UI + lineage at http://localhost:3000 (bound to localhost only). `docker compose up dagster`
+    image: frn:dev-base
+    command: dagster dev -h 0.0.0.0 -p 3000 -m frn.definitions
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - ${FRN_DATA_DIR:-D:/NEU/data}:/data
+      - ../runs:/runs:ro

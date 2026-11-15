@@ -1,0 +1,28 @@
+# FreshRetailNet transformations: bronze (Parquet) -> silver (Parquet). Run through `python -m frn.silver`,
+# which passes the vars, builds into a staging folder and publishes only if every dbt test passes.
+name: frn
+version: "1.0.0"
+config-version: 2
+require-dbt-version: [">=1.11.0", "<1.12.0"]
+profile: frn
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+flags:
+  send_anonymous_usage_stats: false   # no telemetry calls to dbt Labs
+  partial_parse: false
+
+vars:
+  data_root: "/data/freshretailnet"   # overridden by frn.silver
+  revision: "unset"                   # overridden by frn.silver (pinned in configs/source.yaml)
+  out_dir: "unset"                    # staging folder for this build
+  min_clean_days: 30                  # product needs this many stockout-free train days for its own hour profile
+  max_censored_share: 0.8             # cap on the share of a day's demand treated as unobserved (method 2)
+
+models:
+  frn:
+    silver:
+      +materialized: external
+      +options: {compression: zstd}
