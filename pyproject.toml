@@ -11,6 +11,9 @@ requires-python = ">=3.15"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+perinv = ["eval/sql/*.sql"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"
