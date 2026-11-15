@@ -5,6 +5,7 @@ Format: date · who agreed · decision · why.
 
 | Date | Agreed by | Decision | Why |
 |---|---|---|---|
+| 2026-11-14 | Zhengxin (M3) — **team to confirm** | Add `duckdb==2.0.0` to read the evaluation warehouse (partitioned Parquet). Partition columns must be read with explicit `hive_types` | DuckDB runs SQL straight on Parquet files, with no server. 2.0.0 is the only release with Python 3.15 wheels; every 1.5.x release needs a C++ compiler on 3.15. Without `hive_types`, `kappa=0.6` is read as text, and `WHERE kappa = 1` silently matches the 0.6 rows too |
 | 2026-11-13 | Weibo (scaffold) — **team to confirm** | Drop `rliable`; compute IQM (`scipy.stats.trim_mean(x, 0.25)`) and bootstrap CIs (`scipy.stats.bootstrap`) ourselves | rliable pins `arch<8`, and arch 7.x crashes on import with pandas 3. No pandas 2.x exists for Python 3.15, so rliable cannot work on 3.15. The draft only gave rliable as an example. Dropping it also removes 9 transitive packages (statsmodels, formulaic, seaborn, ...) |
 | 2026-11-13 | Weibo (scaffold) — **team to confirm** | Python 3.15 for everyone (pins resolved on 3.15.2) | Homebrew 3.12 was broken on Weibo's Mac. Every pin has a macOS arm64 and Linux x86_64 cp315 wheel or a pure-Python sdist (rliable excluded), including `torch==2.15.0+cpu` |
 | 2026-11-13 | (scaffold) | pip + pinned requirements.txt (generated from requirements.in), no Docker | Nothing is deployed. Pinned deps plus `scripts/setup_linux_vm.sh` reproduce the Linux runs |
