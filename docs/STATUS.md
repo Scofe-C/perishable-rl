@@ -60,6 +60,35 @@ Gotcha: SubprocVecEnv fails if the script is fed through stdin or lacks the `__m
 use forkserver/spawn). Always run real script files.
 
 ## History
+- 2026-11-14 (M3): Added cross-evaluation to the runner. `eval_envs` in a matrix group builds on A and scores on B (demand may differ, nothing else), and reuses A's trained model. The warehouse pairs on the eval world; `metrics.paired_groups` gives the Q4 calibration cost; group D now has D13 and DP13. Also fixed a Windows-only race: a parallel worker reading a manifest made another worker's final `os.replace` fail, which left that run stuck at `running`.
+- 2026-11-14 (M3): Real-data calibration:
+  - `perinv/data/calibration.py` and `scripts/make_calibrated_configs.py` turn the infra C1 file into `configs/env/calibrated/*.yaml` (12 files: m1/m3 × N 1,2,5 × κ 0.6,1.0).
+  - `configs/experiments/calibrated.yaml` defines group D.
+  - Docs for M3 infra: `docs/infra/STRUCTURE.md` and `docs/infra/RUN.md`.
+  - Open item: cross-evaluation (build on m1, evaluate on m3) is not in the runner yet.
+- 2026-11-14 (M3): Warehouse reader and analysis done. Phase 1 infra is complete.
+  - `eval/warehouse.py`: `connect()` sees done runs only and uses fixed types.
+  - `eval/sql/views.sql`: the views `v_step`, `v_path`, `v_day`, `v_run` and `v_vs_dp`. Every metric is defined here once.
+  - `eval/metrics.py` and `eval/stats.py`: IQM, percentile bootstrap and paired differences.
+  - `scripts/analyze.py`: writes `runs.csv`, `summary.csv` and `profit_<group>.png`.
+
+  Result: 50 passed, 8 skipped, plus 1 slow test.
+- 2026-11-14 (M3): Runner done: `src/perinv/runner.py`, `scripts/run_matrix.py` and `configs/experiments/core.yaml` (124 jobs).
+  - Skips finished runs, runs K jobs in parallel (spawn), and a failure in one job does not stop the others.
+  - Resumes after a hard kill. This is tested with a real subprocess (`-m slow`).
+  - Builders are plugged in as "module:function" (WAREHOUSE.md §8). Every job is "blocked" until `train.build` and the baseline builders exist.
+
+  Result: 38 passed, 8 skipped, plus 1 slow test.
+- 2026-11-14 (M3): Rewrote `utils/run_io.py` per WAREHOUSE.md §4:
+  - `train_key` / `run_key` (no git SHA)
+  - `run_context` (running → done/failed, `failure.json`, `log.jsonl`)
+  - `run_status`
+  - `official` mode refuses a dirty tree
+  - package list via `importlib.metadata`. The old `pip freeze` silently returned nothing in pip-less (uv) venvs.
+
+  `tests/test_run_io.py` added. Result: 30 passed, 8 skipped.
+- 2026-11-14 (M3): `eval/evaluate.py`, `eval/writer.py` and `utils/atomic.py` are implemented against docs/WAREHOUSE.md and tested with a SPEC §3 test double (`tests/fakes.py`). Result: 19 passed, 8 skipped. A file for 100 paths × 30 days is 2–5 bytes/row and takes about 10 ms to write.
+- 2026-11-14 (M3): Added duckdb 2.0.0 (see DECISIONS.md). Verified the pinned env on native Windows with Python 3.15.2: 9 passed, 8 skipped, ruff clean. PyYAML has no Windows cp315 wheel, so install it with `PYYAML_FORCE_LIBYAML=0` to skip the C extension when no MSVC is present.
 - 2026-11-13: The plan was turned into a repo skeleton. Docker was dropped because nothing is
   deployed; pinned requirements plus `scripts/setup_linux_vm.sh` cover Linux runs. CRN paths
   generated during the smoke check were deleted so they can be regenerated with the pinned env.
