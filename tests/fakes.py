@@ -129,3 +129,52 @@ def build_slow(ctx):
 
     time.sleep(1.0)
     return ConstantPolicy([1] * ctx.cfg.n_skus)
+
+
+# ---------------------------------------------------------------- fault injection (tests/test_faults.py)
+
+class FixedActionPolicy:
+    """Returns exactly the given object every day, so tests can feed evaluate() malformed actions."""
+
+    def __init__(self, action):
+        self.action = action
+
+    def reset(self) -> None:
+        pass
+
+    def act(self, obs, info):
+        return self.action
+
+
+BAD_ACTIONS = {
+    "nan": lambda n: np.full(n, np.nan),
+    "negative": lambda n: np.full(n, -1),
+    "fraction": lambda n: np.full(n, 1.5),
+    "wrong_shape": lambda n: np.ones(n + 1, np.int64),
+    "text": lambda n: np.array(["2"] * n),
+}
+
+
+def build_bad_action(ctx):
+    """Policy name 'bad_<kind>' selects the malformed action from BAD_ACTIONS."""
+    return FixedActionPolicy(BAD_ACTIONS[ctx.policy.removeprefix("bad_")](ctx.cfg.n_skus))
+
+
+def build_scalar(ctx):
+    """A Discrete-style 0-d action: valid for N = 1."""
+    return FixedActionPolicy(np.int64(2))
+
+
+def build_die(ctx):
+    """Hard crash after the run started: no exception, no cleanup (like a segfault or an OOM kill)."""
+    import os
+
+    os._exit(3)
+
+
+class NanRewardEnv(FakeEnv):
+    """A buggy env: the reward of day 1 is NaN."""
+
+    def step(self, action):
+        obs, reward, term, trunc, info = super().step(action)
+        return obs, (float("nan") if self.t == 2 else reward), term, trunc, info

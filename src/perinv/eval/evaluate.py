@@ -50,13 +50,42 @@ class EvalResult:
         return df.sort_values("path_id", ignore_index=True)
 
 
+class InvalidActionError(ValueError):
+    """A policy broke the SPEC §8 contract: act() must return N non-negative integer order quantities."""
+
+
+def as_order(action, n: int, path: int, day: int) -> np.ndarray:
+    """Check one policy action and return it as int64[N]. Structure only: orders above the remaining capacity
+    are legal here (the env clips them, SPEC §3; DQN relies on that). A 0-d or (1,) action is fine for N = 1."""
+    a = np.asarray(action)
+    where = f"path {path}, day {day}"
+    if a.dtype == bool or not np.issubdtype(a.dtype, np.number) or np.issubdtype(a.dtype, np.complexfloating):
+        raise InvalidActionError(f"{where}: action must be numeric order quantities, got dtype {a.dtype}: {a!r}")
+    if a.size != n:
+        raise InvalidActionError(f"{where}: action must have one order per SKU ({n}), got shape {a.shape}: {a!r}")
+    a = a.reshape(n)
+    if np.issubdtype(a.dtype, np.floating):
+        if not np.isfinite(a).all():
+            raise InvalidActionError(f"{where}: action has NaN/inf: {a!r}")
+        if (a != np.round(a)).any():
+            raise InvalidActionError(f"{where}: orders must be whole units, got {a!r} "
+                                     f"(round in the policy adapter, SPEC §4)")
+    if (a < 0).any():
+        raise InvalidActionError(f"{where}: negative order {a!r}")
+    return a.astype(np.int64)
+
+
 def _per_sku(info: dict, key: str, n: int) -> np.ndarray:
     if key not in info:
         raise KeyError(f"env info is missing {key!r} (SPEC §6)")
     v = np.asarray(info[key])
     if v.size != n:
         raise ValueError(f"info[{key!r}] must have one value per SKU ({n}), got shape {v.shape}")
-    return v.reshape(n)
+    v = v.reshape(n)
+    # quantities go into int32 columns: a float like 2.7 or NaN would be truncated or garbled silently
+    if not np.issubdtype(v.dtype, np.integer) and not (np.isfinite(v).all() and (v == np.round(v)).all()):
+        raise ValueError(f"info[{key!r}] must hold whole units, got {v!r}")
+    return v
 
 
 def _occupancy(info: dict, n: int) -> np.ndarray:
@@ -92,7 +121,7 @@ def evaluate(policy: Policy, env, demand: np.ndarray, path_ids: Sequence[int] | 
         obs, info = env.reset(seed=k, options={"demand_path": demand[k]})
         for t in range(horizon):
             qty["occ"][row, t] = _occupancy(info, n)
-            action = policy.act(obs, info)
+            action = as_order(policy.act(obs, info), n, k, t)
             obs, reward, terminated, truncated, info = env.step(action)
             for field, key in _INFO_KEYS.items():
                 qty[field][row, t] = _per_sku(info, key, n)

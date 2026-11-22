@@ -57,9 +57,10 @@ def _run(args: argparse.Namespace, seeds: list[str] | None) -> int:
         width = max((len(j.name) for j, _, _ in rows), default=10)
         for job, status, action in rows:
             print(f"{job.name:<{width}}  {status:<8}  {action}")
-        actions = [a if a in ("run", "skip") else "blocked" for _, _, a in rows]
+        actions = [a if a in ("run", "skip") else a.split(":")[0] for _, _, a in rows]
         print(f"\n{len(rows)} jobs: {actions.count('run')} to run, {actions.count('skip')} done, "
-              f"{actions.count('blocked')} blocked (no builder yet)")
+              f"{actions.count('no builder')} blocked (no builder yet), "
+              f"{actions.count('no CRN')} blocked (no CRN paths)")
         return 0
     counts = run_matrix(jobs, n_jobs=args.jobs, force=args.force, official=args.official)
     print(f"done={counts['done']} failed={counts['failed']} skipped/blocked={counts['skipped']}")

@@ -85,11 +85,14 @@ def test_expand_rejects_two_jobs_in_one_folder(ws):
 
 
 def test_missing_crn_paths_fail_early(ws):
+    """plan() lists every job without CRN paths; run_matrix refuses to start and names all of them."""
     m = write_matrix(ws, {"A": {"envs": envs(ws, "n1_k06"), "policies": ["ppo"]}})
     jobs = expand(m, runs_root=(ws / "runs").as_posix(), crn_root=(ws / "nope").as_posix(),
                   configs_root=ws / "configs")
+    assert all(action.startswith("no CRN") and "make_crn_paths" in action for _, _, action in plan(jobs))
     with pytest.raises(FileNotFoundError, match="make_crn_paths"):
-        plan(jobs)
+        run_matrix(jobs)
+    assert not (ws / "runs").exists()   # nothing ran
 
 
 def test_unimplemented_builder_is_blocked_not_run(ws):

@@ -76,6 +76,10 @@ def validate(result: EvalResult, cfg: EnvConfig, demand: np.ndarray) -> None:
     if (used > cfg.capacity).any():
         p, t = np.argwhere(used > cfg.capacity)[0]
         fail(f"capacity exceeded on path {ids[p]}, day {t}: {used[p, t]} > {cfg.capacity}")
+    bad = ~np.isfinite(result.day_reward)
+    if bad.any():   # must come first: NaN > tol is False, so the reconcile check below would let NaN through
+        p, t = np.argwhere(bad)[0]
+        fail(f"non-finite reward on path {ids[p]}, day {t}: {result.day_reward[p, t]}")
     gap = np.abs(sku_rewards(result, cfg).sum(axis=2) - result.day_reward)
     if (gap > REWARD_TOL).any():
         p, t = np.argwhere(gap > REWARD_TOL)[0]

@@ -113,6 +113,33 @@ def run_status(run_dir: Path, expected_run_key: str) -> str:
     return "done"
 
 
+def mark_crashed(run_dir: Path, expected_run_key: str, message: str) -> bool:
+    """Record a run whose process died without unwinding (run_context never got to write `failed`).
+
+    Only a manifest of this run_key still at `running` is changed. A run that died before run_context began
+    (e.g. a --force rerun of a done run) keeps its old, valid state. Returns True if the run was marked.
+    """
+    run_dir = Path(run_dir)
+    m = read_manifest(run_dir)
+    if not m or m.get("run_key") != expected_run_key or m.get("status") != "running":
+        return False
+    stage = "unknown"
+    log_file = run_dir / "log.jsonl"
+    if log_file.exists():
+        lines = log_file.read_text(encoding="utf-8").splitlines()
+        if lines:
+            stage = json.loads(lines[-1]).get("stage", stage)
+    error = {"run_key": expected_run_key, "run_name": m.get("run_name"), "stage": stage, "type": "WorkerCrashed",
+             "message": message}
+    atomic_write_text(run_dir / "failure.json", json.dumps(error, indent=2))
+    m.update(status="failed", error=error, end_time=_now())
+    atomic_write_text(run_dir / "manifest.json", json.dumps(m, indent=2, default=str))
+    with open(log_file, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"ts": _now(), "run_key": expected_run_key, "run_name": m.get("run_name"),
+                             "stage": stage, "event": "crashed", "message": message}) + "\n")
+    return True
+
+
 def is_done(run_dir: Path, expected_run_key: str) -> bool:
     return run_status(run_dir, expected_run_key) == "done"
 

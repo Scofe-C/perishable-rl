@@ -20,10 +20,10 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Callable, Iterable
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from functools import cached_property
 from multiprocessing import get_context
+from multiprocessing.connection import wait
 from pathlib import Path
 
 import yaml
@@ -38,6 +38,7 @@ from perinv.utils.run_io import (
     Run,
     describe_env,
     find_trained,
+    mark_crashed,
     run_context,
     run_key,
     run_name,
@@ -254,12 +255,14 @@ def run_job(job: Job, official: bool = False) -> dict:
                      official=official) as run:
         make_env = resolve(job.env_factory)
         run.stage = "build"
+        run.log("stage_start")   # last log line names the stage if the process dies without unwinding
         if trained_in is not None and trained_in != run.dir:
             run.log("reuse_model", from_run=trained_in.name)
         policy: Policy = resolve(job.builder)(BuildContext(
             cfg=cfg, policy=job.policy, hparams=job.hparams, seed=job.seed, train_env_steps=job.train_env_steps,
             run=run, make_env=make_env, reuse_model=trained_in is not None, model_dir=trained_in or run.dir))
         run.stage = "eval"
+        run.log("stage_start")
         demand = load_paths(ecfg, "test", job.crn_root)   # demand paths of the eval world
         t0 = time.perf_counter()
         result = evaluate(policy, make_env(ecfg), demand)
@@ -272,27 +275,48 @@ def run_job(job: Job, official: bool = False) -> dict:
 
 # ---------------------------------------------------------------- the matrix
 
+NO_CRN = "no CRN: "
+NO_BUILDER = "no builder: "
+
+
 def plan(jobs: Iterable[Job], force: bool = False) -> list[tuple[Job, str, str]]:
-    """(job, status, action) for each job. action: 'skip' | 'run' | 'no builder: ...'."""
+    """(job, status, action) for each job. action: 'skip' | 'run' | 'no builder: ...' | 'no CRN: ...'."""
     out = []
     for job in jobs:
-        status = run_status(job.run_dir, job.keys()[1])
+        try:
+            rk = job.keys()[1]
+        except FileNotFoundError as exc:   # eval-world CRN paths never generated: listed, not raised one by one
+            out.append((job, "-", f"{NO_CRN}{exc}"))
+            continue
+        status = run_status(job.run_dir, rk)
         action = "run" if force or status != "done" else "skip"
         if action == "run":
             try:
                 if job.builder:
                     resolve(job.builder)
                 else:
-                    action = f"no builder: none registered for {job.policy!r}"
+                    action = f"{NO_BUILDER}none registered for {job.policy!r}"
             except (ImportError, AttributeError) as exc:
-                action = f"no builder: {exc}"
+                action = f"{NO_BUILDER}{exc}"
         out.append((job, status, action))
     return out
 
 
 def run_matrix(jobs: list[Job], n_jobs: int = 1, force: bool = False, official: bool = False) -> Counter:
-    """Run every job whose action is 'run'. One failure does not stop the others. Returns outcome counts."""
-    todo = [j for j, _, action in plan(jobs, force) if action == "run"]
+    """Run every job whose action is 'run'. One failure does not stop the others. Returns outcome counts.
+
+    Refuses to start (FileNotFoundError, nothing run) if any job lacks CRN test paths, and names all of them:
+    an overnight matrix should not silently skip part of the design.
+    n_jobs > 1: every job runs in its own spawned process, so a hard crash (segfault, OOM kill, os._exit)
+    fails only that job; a shared pool would fail every job in flight with it.
+    """
+    rows = plan(jobs, force)
+    no_crn = sorted({j.eval_env_path or j.env_path for j, _, a in rows if a.startswith(NO_CRN)})
+    if no_crn:
+        n = sum(a.startswith(NO_CRN) for _, _, a in rows)
+        raise FileNotFoundError(f"{n} job(s) have no CRN test paths, so nothing was run. Generate them first "
+                                f"(run: python scripts/make_crn_paths.py {' '.join(no_crn)})")
+    todo = [j for j, _, action in rows if action == "run"]
     counts = Counter(skipped=len(jobs) - len(todo))
     log.info("%d jobs: %d to run, %d skipped or blocked", len(jobs), len(todo), counts["skipped"])
     if n_jobs <= 1:
@@ -300,25 +324,66 @@ def run_matrix(jobs: list[Job], n_jobs: int = 1, force: bool = False, official: 
             try:
                 res = run_job(job, official)
             except Exception as exc:  # already recorded in the run's manifest + failure.json
-                counts[_failed(job, exc)] += 1
+                counts[_failed(job, f"{type(exc).__name__}: {exc}")] += 1
             else:
                 counts[_done(job, res)] += 1
         return counts
-    # spawn everywhere: same behaviour on Windows/macOS/Linux, and no forked torch thread state
-    with ProcessPoolExecutor(max_workers=n_jobs, mp_context=get_context("spawn")) as pool:
-        futures = {pool.submit(run_job, job, official): job for job in todo}
-        for fut in as_completed(futures):
-            try:
-                res = fut.result()
-            except Exception as exc:
-                counts[_failed(futures[fut], exc)] += 1
-            else:
-                counts[_done(futures[fut], res)] += 1
+    _run_isolated(todo, n_jobs, official, counts)
     return counts
 
 
-def _failed(job: Job, exc: BaseException) -> str:
-    log.error("FAILED %s: %s: %s", job.name, type(exc).__name__, exc)
+def _child(job: Job, official: bool, conn) -> None:
+    """Process target: run one job, report ('done', result) or ('failed', message). No report = crashed."""
+    try:
+        conn.send(("done", run_job(job, official)))
+    except BaseException as exc:  # recorded in the manifest by run_context when it got that far
+        conn.send(("failed", f"{type(exc).__name__}: {exc}"))
+    finally:
+        conn.close()
+
+
+def _run_isolated(todo: list[Job], n_jobs: int, official: bool, counts: Counter) -> None:
+    # spawn everywhere: same behaviour on Windows/macOS/Linux, and no forked torch thread state
+    ctx = get_context("spawn")
+    pending, live = list(todo), {}
+    try:
+        while pending or live:
+            while pending and len(live) < n_jobs:
+                job = pending.pop(0)
+                recv, send = ctx.Pipe(duplex=False)
+                proc = ctx.Process(target=_child, args=(job, official, send), name=job.name)
+                proc.start()
+                send.close()   # the child now holds the only write end
+                live[proc.sentinel] = (proc, recv, job)
+            for sentinel in wait(list(live)):
+                proc, recv, job = live.pop(sentinel)
+                try:
+                    msg = recv.recv() if recv.poll() else None
+                except (EOFError, OSError):   # Windows: poll on a pipe whose writer died is BrokenPipeError
+                    msg = None
+                proc.join()
+                recv.close()
+                if msg is None:
+                    counts[_crashed(job, proc.exitcode)] += 1
+                elif msg[0] == "done":
+                    counts[_done(job, msg[1])] += 1
+                else:
+                    counts[_failed(job, msg[1])] += 1
+    finally:   # Ctrl+C or an error in the parent: never leave orphan workers behind
+        for proc, recv, _ in live.values():
+            proc.terminate()
+            proc.join()
+            recv.close()
+
+
+def _crashed(job: Job, exitcode: int | None) -> str:
+    msg = f"worker process died without reporting (exit code {exitcode}): segfault, out of memory or os._exit"
+    mark_crashed(job.run_dir, job.keys()[1], msg)
+    return _failed(job, f"WorkerCrashed: {msg}")
+
+
+def _failed(job: Job, message: str) -> str:
+    log.error("FAILED %s: %s", job.name, message)
     return "failed"
 
 
