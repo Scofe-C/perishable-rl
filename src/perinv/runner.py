@@ -114,7 +114,15 @@ class Job:
 
 # Fields that may differ between the build config and the eval config of a cross-evaluation: only the demand
 # process. Anything else (N, capacity, dynamics, costs) would change the action space or the profit yardstick.
-CROSS_EVAL_MAY_DIFFER = {"demand_mean", "season", "name"}
+CROSS_EVAL_MAY_DIFFER = {"demand_mean", "season", "scenario", "name"}
+
+
+def check_buildable(cfg: EnvConfig) -> None:
+    """Scenario configs are eval-only: the env trains on demand_mean/season and would ignore the shocks, so a
+    run built on one would be labelled as a shock run while training on the base world."""
+    if cfg.scenario:
+        raise ValueError(f"{cfg.name} has a demand scenario and is eval-only: list it under eval_envs, "
+                         f"paired with its base config under envs")
 
 
 def check_cross_eval(build: EnvConfig, evaluate_on: EnvConfig) -> None:
@@ -123,6 +131,11 @@ def check_cross_eval(build: EnvConfig, evaluate_on: EnvConfig) -> None:
     if diff:
         raise ValueError(f"cross-evaluation {build.name} -> {evaluate_on.name}: configs may differ only in "
                          f"{sorted(CROSS_EVAL_MAY_DIFFER - {'name'})}, but differ in {diff}")
+    if evaluate_on.scenario:   # shocked path k = base path k + shock, only if the base demand is the same
+        moved = [f for f in ("demand_mean", "season") if getattr(build, f) != getattr(evaluate_on, f)]
+        if moved:
+            raise ValueError(f"shock evaluation {build.name} -> {evaluate_on.name}: a scenario config must keep "
+                             f"the base demand of its build config, but {moved} differ")
 
 
 def crn_test_sha256(cfg: EnvConfig, crn_root: str | Path) -> str:
@@ -172,6 +185,8 @@ def expand(matrix_path: str | Path, *, seeds: list[int] | None = None, groups: s
     for group, g in spec["groups"].items():
         if groups and group not in groups:
             continue
+        for env_path in g["envs"]:
+            check_buildable(load_env_config(env_path))
         eval_envs = g.get("eval_envs")
         if eval_envs is not None:
             if len(eval_envs) != len(g["envs"]):

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import yaml
 
+from perinv.data.scenarios import Shock, check_fits, parse_scenario
+
 
 @dataclass(frozen=True)
 class EnvConfig:
@@ -25,6 +27,7 @@ class EnvConfig:
     expiry_cost: tuple[float, ...] = ()
     lost_sales_cost: tuple[float, ...] = ()
     kappa: float | None = None  # informational; capacity is what the env uses
+    scenario: tuple[Shock, ...] = ()  # demand shocks on the CRN paths, eval only (perinv.data.scenarios)
     name: str = field(default="", compare=False)
 
     def __post_init__(self) -> None:
@@ -36,15 +39,18 @@ class EnvConfig:
                   "lost_sales_cost"):
             if len(getattr(self, f)) != self.n_skus:
                 raise ValueError(f"{f} must have one entry per SKU ({self.n_skus})")
+        check_fits(self.scenario, self.n_skus, self.horizon)
 
     @property
     def pipeline_slots(self) -> int:
         return self.lead_time
 
     def demand_params(self) -> dict:
-        """The subset that determines CRN demand paths (SPEC §7)."""
-        return {"N": self.n_skus, "lambda": list(self.demand_mean),
-                "season": list(self.season), "T": self.horizon}
+        """The subset that determines CRN demand paths (SPEC §7). `scenario` only when set (stable base hashes)."""
+        d = {"N": self.n_skus, "lambda": list(self.demand_mean), "season": list(self.season), "T": self.horizon}
+        if self.scenario:
+            d["scenario"] = [s.to_dict() for s in self.scenario]
+        return d
 
     def demand_hash(self) -> str:
         return stable_hash(self.demand_params())
@@ -52,6 +58,8 @@ class EnvConfig:
     def config_hash(self) -> str:
         d = asdict(self)
         d.pop("name")
+        if not self.scenario:
+            d.pop("scenario")   # configs without a scenario keep the hash they had before the field existed
         return stable_hash(d)
 
 
@@ -65,8 +73,16 @@ def capacity_from_kappa(kappa: float, ref_occupancy: float) -> int:
     return max(1, round(kappa * ref_occupancy))
 
 
+# Top-level YAML keys that are not EnvConfig fields but are allowed as provenance (the loader ignores them).
+PROVENANCE_KEYS = {"calibration", "shock_of"}
+
+
 def load_env_config(path: str | Path) -> EnvConfig:
     raw = yaml.safe_load(Path(path).read_text())
+    known = (set(EnvConfig.__dataclass_fields__) - {"name"}) | PROVENANCE_KEYS
+    unknown = set(raw) - known
+    if unknown:   # e.g. a misspelt `scenarios:` would otherwise load as the base world, silently
+        raise ValueError(f"{path}: unknown keys {sorted(unknown)}")
     n = raw["n_skus"]
 
     def per_sku(key: str) -> tuple[float, ...]:
@@ -87,5 +103,6 @@ def load_env_config(path: str | Path) -> EnvConfig:
         expiry_cost=per_sku("expiry_cost"),
         lost_sales_cost=per_sku("lost_sales_cost"),
         kappa=raw.get("kappa"),
+        scenario=parse_scenario(raw.get("scenario")),
         name=Path(path).stem,
     )

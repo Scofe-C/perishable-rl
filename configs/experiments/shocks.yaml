@@ -1,0 +1,25 @@
+# Group S: demand-shock robustness (extension, eval-only; docs/DECISIONS.md 2026-11-22).
+# Every group builds on the base config (same train_key as core groups A/B, so trained models are reused) and
+# is scored on a shocked copy of its test paths: configs/env/shocks/<base>__<preset>.yaml.
+#
+#   python scripts/make_shock_configs.py configs/env/n1_k06.yaml configs/env/n5_k06.yaml
+#   python scripts/make_crn_paths.py configs/env/shocks/*.yaml
+#   python scripts/run_matrix.py configs/experiments/core.yaml        # base worlds first (reference)
+#   python scripts/run_matrix.py configs/experiments/shocks.yaml
+#
+# Shock cost per policy = metrics.paired_worlds(con, "A_spike", "A"): same model, path k shocked - path k base.
+# DP is solved for Poisson demand, so in a shocked world it is a policy, not the optimum: ignore pct_of_dp there.
+budget: configs/budget.yaml
+x-n1-policies: &n1 [ppo, a2c, sac, dqn, maskppo, {name: dp, seeds: [0]}, {name: ss, seeds: [0]}, {name: newsvendor, seeds: [0]}]
+x-n5-policies: &n5 [ppo, a2c, sac, {name: ss, seeds: [0]}, {name: newsvendor, seeds: [0]}]
+groups:
+  A_spike:  {envs: [configs/env/n1_k06.yaml], eval_envs: [configs/env/shocks/n1_k06__spike.yaml],  policies: *n1}
+  A_drop:   {envs: [configs/env/n1_k06.yaml], eval_envs: [configs/env/shocks/n1_k06__drop.yaml],   policies: *n1}
+  A_outage: {envs: [configs/env/n1_k06.yaml], eval_envs: [configs/env/shocks/n1_k06__outage.yaml], policies: *n1}
+  A_shift:  {envs: [configs/env/n1_k06.yaml], eval_envs: [configs/env/shocks/n1_k06__shift.yaml],  policies: *n1}
+  A_noisy:  {envs: [configs/env/n1_k06.yaml], eval_envs: [configs/env/shocks/n1_k06__noisy.yaml],  policies: *n1}
+  B_spike:  {envs: [configs/env/n5_k06.yaml], eval_envs: [configs/env/shocks/n5_k06__spike.yaml],  policies: *n5}
+  B_drop:   {envs: [configs/env/n5_k06.yaml], eval_envs: [configs/env/shocks/n5_k06__drop.yaml],   policies: *n5}
+  B_outage: {envs: [configs/env/n5_k06.yaml], eval_envs: [configs/env/shocks/n5_k06__outage.yaml], policies: *n5}
+  B_shift:  {envs: [configs/env/n5_k06.yaml], eval_envs: [configs/env/shocks/n5_k06__shift.yaml],  policies: *n5}
+  B_noisy:  {envs: [configs/env/n5_k06.yaml], eval_envs: [configs/env/shocks/n5_k06__noisy.yaml],  policies: *n5}

@@ -6,6 +6,7 @@ this module only reads the views and adds IQM + CIs over seeds.
     summary(con)                        # one row per (group, N, kappa, policy): IQM over seeds + 95% CI
     paired_vs(con, "ppo", "ss")         # per-cell mean per-path profit difference, seed by seed
     paired_groups(con, "D13", "D3")     # cross-evaluation: same policy + seed, same eval world, group A - group B
+    paired_worlds(con, "A_spike", "A")  # shock cost: same trained model, same path index, shocked world - base world
 
 Owner: Member 3.
 """
@@ -76,6 +77,30 @@ def paired_groups(con: duckdb.DuckDBPyConnection, group: str, reference: str, se
                    FROM v_path v JOIN dim_run d USING (run_key))
         SELECT a.policy, a.seed, a.n_skus, a.kappa, a.path_id, a.profit AS profit, b.profit AS ref_profit
         FROM p a JOIN p b USING (policy, seed, eval_config_hash, path_id)
+        WHERE a."group" = ? AND b."group" = ?
+        ORDER BY ALL
+    """, [group, reference]).df()
+    rows = []
+    for key, g in pairs.groupby(["policy", "seed", "n_skus", "kappa"], sort=True):
+        est = paired_difference(g["profit"], g["ref_profit"], seed=seed)
+        rows.append(dict(zip(["policy", "seed", "n_skus", "kappa"], key, strict=True))
+                    | {"group": group, "reference": reference, "mean_diff": est.value, "low": est.low,
+                       "high": est.high, "mean_ref_profit": float(g["ref_profit"].mean()), "n_paths": est.n})
+    return pd.DataFrame(rows)
+
+
+def paired_worlds(con: duckdb.DuckDBPyConnection, group: str, reference: str, seed: int = 0) -> pd.DataFrame:
+    """Profit of the same model (train_key) on path k of `group`'s eval world minus path k of `reference`'s.
+
+    For demand shocks: paired_worlds(con, "A_spike", "A") = what the spike costs each policy. Shocked path k is
+    base path k plus the shock (perinv.data.scenarios), so the per-path difference isolates the shock. The
+    runner guarantees that pairing by refusing shock configs whose base demand differs from the build config.
+    """
+    pairs = con.execute("""
+        WITH p AS (SELECT v.path_id, v.profit, d."group", d.policy, d.seed, d.n_skus, d.kappa, d.train_key
+                   FROM v_path v JOIN dim_run d USING (run_key))
+        SELECT a.policy, a.seed, a.n_skus, a.kappa, a.path_id, a.profit AS profit, b.profit AS ref_profit
+        FROM p a JOIN p b USING (train_key, path_id)
         WHERE a."group" = ? AND b."group" = ?
         ORDER BY ALL
     """, [group, reference]).df()
