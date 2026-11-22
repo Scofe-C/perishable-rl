@@ -60,6 +60,7 @@ Gotcha: SubprocVecEnv fails if the script is fed through stdin or lacks the `__m
 use forkserver/spawn). Always run real script files.
 
 ## History
+- 2026-11-22 (M3): Demand-shock scenarios (extension, eval-only; DECISIONS.md). `data/scenarios.py`, optional `EnvConfig.scenario`, `scripts/make_shock_configs.py` → `configs/env/shocks/` (5 presets × n1_k06, n5_k06), `configs/experiments/shocks.yaml` (groups A_*/B_*), `metrics.paired_worlds`. Runner guards: scenario configs never train; shock eval must keep the base demand. Loader rejects unknown YAML keys. Result: 84 passed, 8 skipped, plus 1 slow test.
 - 2026-11-14 (M3): Added cross-evaluation to the runner. `eval_envs` in a matrix group builds on A and scores on B (demand may differ, nothing else), and reuses A's trained model. The warehouse pairs on the eval world; `metrics.paired_groups` gives the Q4 calibration cost; group D now has D13 and DP13. Also fixed a Windows-only race: a parallel worker reading a manifest made another worker's final `os.replace` fail, which left that run stuck at `running`.
 - 2026-11-14 (M3): Real-data calibration:
   - `perinv/data/calibration.py` and `scripts/make_calibrated_configs.py` turn the infra C1 file into `configs/env/calibrated/*.yaml` (12 files: m1/m3 × N 1,2,5 × κ 0.6,1.0).
