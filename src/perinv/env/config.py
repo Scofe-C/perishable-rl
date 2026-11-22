@@ -75,14 +75,18 @@ def capacity_from_kappa(kappa: float, ref_occupancy: float) -> int:
 
 # Top-level YAML keys that are not EnvConfig fields but are allowed as provenance (the loader ignores them).
 PROVENANCE_KEYS = {"calibration", "shock_of"}
+# Free extension namespace: any top-level key starting with this is ignored (notes, owner tags, tool metadata),
+# so new annotations need no code change. They never affect the env or any hash.
+EXTENSION_PREFIX = "x-"
 
 
 def load_env_config(path: str | Path) -> EnvConfig:
     raw = yaml.safe_load(Path(path).read_text())
     known = (set(EnvConfig.__dataclass_fields__) - {"name"}) | PROVENANCE_KEYS
-    unknown = set(raw) - known
+    unknown = {k for k in raw if k not in known and not str(k).startswith(EXTENSION_PREFIX)}
     if unknown:   # e.g. a misspelt `scenarios:` would otherwise load as the base world, silently
-        raise ValueError(f"{path}: unknown keys {sorted(unknown)}")
+        raise ValueError(f"{path}: unknown keys {sorted(unknown)}; put free annotations under an "
+                         f"'{EXTENSION_PREFIX}' prefix (e.g. x-note)")
     n = raw["n_skus"]
 
     def per_sku(key: str) -> tuple[float, ...]:

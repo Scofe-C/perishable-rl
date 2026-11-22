@@ -130,6 +130,19 @@ def test_bad_shocks_are_rejected(raw, match):
         parse_scenario(raw)
 
 
+def test_x_prefixed_keys_are_free_annotations(tmp_path):
+    raw = yaml.safe_load(open("configs/env/n1_k06.yaml"))
+    plain, annotated = tmp_path / "plain.yaml", tmp_path / "annotated.yaml"
+    plain.write_text(yaml.safe_dump(raw))
+    annotated.write_text(yaml.safe_dump(raw | {"x-note": "store 12, winter", "x-owner": {"member": "M3"}}))
+    a, b = load_env_config(plain), load_env_config(annotated)
+    assert (a.demand_hash(), a.config_hash()) == (b.demand_hash(), b.config_hash())
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(raw | {"note": "no prefix"}))
+    with pytest.raises(ValueError, match="x-"):
+        load_env_config(bad)
+
+
 def test_shock_must_fit_the_env():
     with pytest.raises(ValueError, match="past the horizon"):
         shocked(BASE, Shock("spike", (5, 30), 2, 2.0))
