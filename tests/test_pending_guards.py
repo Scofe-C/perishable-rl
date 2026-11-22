@@ -6,7 +6,6 @@ These show up as SKIPPED in every pytest run, so nobody forgets them.
 import pytest
 
 PENDING = {
-    "dynamics: FIFO, expiry, pipeline shift P=tau, lost sales, hand-checked rewards": "M1",
     "env: gymnasium check_env; reset(demand_path) replays exactly; capacity never exceeded": "M1",
     "conformance: env step == DP transition on random (state, action, demand), several (C,L,tau)": "M1",
     "dp: state count == C(C+L+P, L+P); tiny instance vs brute force; V[0,s0] ~ simulated DP policy": "M1",

@@ -7,7 +7,7 @@ Newest first. One entry per change to SPEC.md, the budgets, the fairness rules o
 |---|---|---|---|
 | 2026-11-22 | Zhengxin (M1+M3) — **team to confirm** | **D1** Box mapping uses the rescaled sigmoid `share = (σ(4a₀) − σ(−4)) / (σ(4) − σ(−4))` (SPEC §4.1). This is a new formula, not the "raise the scale" fallback SPEC anticipated | Measured: plain `σ(4a₀)` misses both endpoints from R = 28 (R = 60 gives 1 and 59). The rescaled form is exact at both ends for every R ≤ 1000 and keeps share(0) = 0.5 |
 | 2026-11-22 | Zhengxin — **team to confirm** | **D2** Clipping: while `sum(q) > R`, take one unit off the largest order, ties to the lowest SKU index (SPEC §3) | "Largest orders first" left ties open; the env and the DP must clip identically. Matches `tests/fakes.py` |
-| 2026-11-22 | Zhengxin — **team to confirm** | **D3** `info["occupancy"]` is decision-time occupancy, before the order | Asked for in WAREHOUSE §8; `evaluate` already reads it that way |
+| 2026-11-22 | Zhengxin — **team to confirm** | **D3** `info["occupancy"]` is decision-time occupancy, before the order | Asked for in the old WAREHOUSE §8 (now SPEC §6); `evaluate` already reads it that way |
 | 2026-11-22 | Zhengxin — **team to confirm** | **D4** Initial state empty (provisional) | Revisit after the DP measures the cold-start effect (empty start vs steady-state start) |
 | 2026-11-22 | Zhengxin — **team to confirm** | **D5** `reset()` without a demand path draws Poisson demand from `self.np_random` | Training mode; evaluation always passes a CRN path |
 | 2026-11-22 | Zhengxin — **team to confirm** | **D6** Base env `action_space = MultiDiscrete([C+1]*N)`; never terminated, truncated at T | The wrappers (§4.1, §4.2) translate into this one integer interface |
