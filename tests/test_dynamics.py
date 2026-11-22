@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import perinv.env
-from perinv.env.dynamics import EVENT_ORDER_VERSION, clip_orders, step
+from perinv.env.dynamics import EVENT_ORDER_VERSION, clip_orders, initial_state, step
 from perinv.utils.run_io import event_order_version
 
 CFG1 = replace(tiny_config(n_skus=1, capacity=20), horizon=30)   # L=3, tau=2, p/c/h/w/b = 10/4/0.1/2/2
@@ -69,6 +69,21 @@ def test_freshest_bucket_is_empty_at_decision_time():
         tr = step(inv, pipe, rng.integers(0, 21, (64, 1)), rng.poisson(4, (64, 1)), CFG1)
         inv, pipe = tr.inv, tr.pipe
         assert (inv[:, :, -1] == 0).all()
+
+
+# ---------------------------------------------------------------- initial state (D4)
+
+def test_initial_state_fills_the_pipeline_by_expected_demand():
+    cfg = replace(tiny_config(n_skus=2, capacity=40), demand_mean=(4.0, 5.0), season=(1.0, 0.5, 1, 1, 1, 1, 1))
+    inv, pipe = initial_state(cfg)
+    assert inv.tolist() == [[0, 0, 0], [0, 0, 0]]
+    assert pipe.tolist() == [[4, 2], [5, 3]]           # slot k arrives on day k: lambda * season[k]; 2.5 -> 3
+
+
+def test_initial_state_is_capped_by_the_clip_rule():
+    cfg = tiny_config(n_skus=2, capacity=5)            # wants [[4, 4], [4, 4]] = 16 > 5
+    _, pipe = initial_state(cfg)
+    assert pipe.sum() == 5 and pipe.tolist() == [[1, 1], [1, 2]]
 
 
 # ---------------------------------------------------------------- clipping (D2)

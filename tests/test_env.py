@@ -66,13 +66,21 @@ def test_episode_shape_and_info():
         env.step(np.array([0, 0, 0]))
 
 
+def test_reset_starts_from_the_warm_state():
+    """D4: on hand empty, pipeline pre-filled with round(lambda * season) (CFG1: lambda 4, tau 2 -> [4, 4])."""
+    env = PerishableInventoryEnv(CFG1)
+    _, info = env.reset(seed=0)
+    assert info["state"]["inv"].tolist() == [[0, 0, 0]] and info["state"]["pipe"].tolist() == [[4, 4]]
+
+
 def test_occupancy_is_decision_time_and_obs_matches_spec5():
     env = PerishableInventoryEnv(CFG1)
     env.reset(options={"demand_path": np.zeros((10, 1), np.int64)})
-    _, _, _, _, info = env.step(np.array([5]))
-    assert info["occupancy"] == 0                       # D3: before today's order of 5
+    before = env.occupancy
+    _, _, _, _, info = env.step(np.array([3]))
+    assert info["occupancy"] == before == 8             # D3: before today's order (warm pipeline holds 8)
     obs, _, _, _, info = env.step(np.array([0]))
-    assert info["occupancy"] == 5
+    assert info["occupancy"] == before + 3
     L, P, C = CFG1.shelf_life, CFG1.lead_time, CFG1.capacity
     inv, pipe = info["state"]["inv"], info["state"]["pipe"]
     expected = np.concatenate([inv.ravel() / C, pipe.ravel() / C, np.eye(7)[2], [2 / 10, (inv.sum() + pipe.sum()) / C]])
@@ -129,9 +137,10 @@ def test_capacity_never_exceeded(n, cap, seed):
 def test_action_masks_follow_remaining_capacity():
     env = PerishableInventoryEnv(CFG1)
     env.reset(options={"demand_path": np.zeros((10, 1), np.int64)})
-    assert env.action_masks().all()
-    env.step(np.array([5]))
-    assert env.action_masks().tolist() == [k <= 7 for k in range(13)]
+    assert env.action_masks().tolist() == [k <= 4 for k in range(13)]        # C 12 - warm pipeline 8
+    env.step(np.array([2]))
+    assert env.action_masks().tolist() == [k <= 2 for k in range(13)]
+    assert env.action_masks().tolist() == (np.arange(13) <= env.remaining).tolist()
     with pytest.raises(ValueError, match="N = 1"):
         PerishableInventoryEnv(CFG3).action_masks()
 
@@ -172,9 +181,11 @@ def test_masks_reach_subproc_workers():
     vec = SubprocVecEnv([lambda: _masked_env(cfg)] * 2, start_method="spawn")
     try:
         vec.reset()
-        vec.step(np.array([5, 0]))
+        vec.step(np.array([2, 0]))
         masks = get_action_masks(vec)
-        assert masks[0].tolist() == [k <= 7 for k in range(13)] and masks[1].all()
+        remaining = vec.get_attr("remaining")          # per worker; demand is random in training mode
+        for i in range(2):
+            assert masks[i].tolist() == (np.arange(13) <= remaining[i]).tolist()
     finally:
         vec.close()
 
@@ -216,8 +227,9 @@ def test_one_sku_can_take_all_capacity(n):
 def test_box_wrapper_reads_remaining_capacity():
     env = CapacityShareAction(PerishableInventoryEnv(CFG3))
     env.reset(options={"demand_path": np.zeros((10, 3), np.int64)})
-    _, _, _, _, info = env.step(np.array([1.0, 0.0, 0.0, 0.0], np.float32))    # fill everything: R = 30
-    assert info["ordered"].tolist() == [10, 10, 10] and not info["clipped"]
+    assert env.unwrapped.remaining == 6                                        # 30 - warm pipeline 3 x 2 x 4
+    _, _, _, _, info = env.step(np.array([1.0, 0.0, 0.0, 0.0], np.float32))    # fill everything
+    assert info["ordered"].tolist() == [2, 2, 2] and not info["clipped"]
     _, _, _, _, info = env.step(np.array([1.0, 0.0, 0.0, 0.0], np.float32))    # nothing left
     assert info["ordered"].sum() == 0
 

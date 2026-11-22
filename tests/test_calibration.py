@@ -78,3 +78,47 @@ def test_refuses_non_c1_files(tmp_path):
     pq.write_table(pa.table({"x": [1]}), tmp_path / "other.parquet")
     with pytest.raises(ValueError, match="not a C1"):
         cal.load_c1(tmp_path / "other.parquet")
+
+
+def test_capacity_from_oref_is_shared_by_both_methods():
+    configs = cal.build_configs(_params(), o_ref={1: 13.0, 2: 27.0, 5: 36.0})
+    for n, o in ((1, 13.0), (2, 27.0), (5, 36.0)):
+        for k, kappa in (("06", 0.6), ("10", 1.0)):
+            m1, m3 = configs[f"frn_m1_n{n}_k{k}"], configs[f"frn_m3_n{n}_k{k}"]
+            assert m1["capacity"] == m3["capacity"] == round(kappa * o)
+            assert "O_ref" in m3["calibration"]["capacity_rule"]
+
+
+def _oref_cli(tmp_path, entries):
+    import json
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    c1 = write_c1(tmp_path / "c1.parquet")
+    (tmp_path / "oref.json").write_text(json.dumps({"configs": entries}))
+    out = tmp_path / "calibrated"
+    res = subprocess.run([sys.executable, str(REPO / "scripts" / "make_calibrated_configs.py"), str(c1),
+                          "--out", str(out), "--oref", str(tmp_path / "oref.json")], capture_output=True, text=True)
+    return res, out
+
+
+def test_oref_cli_uses_the_m3_world_and_checks_the_demand_hash(tmp_path):
+    first, out = _oref_cli(tmp_path, {f"frn_m3_n{n}_k06": {"demand_hash": "x", "n_skus": n, "o_ref": 10.0 * n,
+                                                           "levels": []} for n in (1, 2, 5)})
+    assert first.returncode != 0 and "rerun scripts/measure_oref.py" in first.stderr and not out.exists()
+    plain, _ = _oref_cli(tmp_path / "a", {})      # no m3 entries at all
+    assert plain.returncode != 0 and "no frn_m3_" in plain.stderr
+    # real hashes: generate once without --oref to learn them, then run with a matching O_ref file
+    subprocess.run([sys.executable, str(REPO / "scripts" / "make_calibrated_configs.py"),
+                    str(write_c1(tmp_path / "c1.parquet")), "--out", str(tmp_path / "probe")], check=True)
+    hashes = {f"frn_m3_n{n}_k06": load_env_config(tmp_path / "probe" / f"frn_m3_n{n}_k06.yaml").demand_hash()
+              for n in (1, 2, 5)}
+    ok, out = _oref_cli(tmp_path, {name: {"demand_hash": h, "n_skus": int(name[8]), "o_ref": 10.0 * int(name[8]),
+                                          "levels": []} for name, h in hashes.items()})
+    assert ok.returncode == 0, ok.stderr
+    assert load_env_config(out / "frn_m1_n5_k10.yaml").capacity == 50
+    assert load_env_config(out / "frn_m3_n2_k06.yaml").capacity == 12
+
+
+def _params():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        return cal.load_c1(write_c1(Path(d) / "c1.parquet"))

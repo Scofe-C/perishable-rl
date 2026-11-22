@@ -21,7 +21,23 @@ import numpy as np
 from perinv.env.config import EnvConfig
 
 # Bump whenever SPEC §3 changes: it is part of every train_key (perinv.utils.run_io).
-EVENT_ORDER_VERSION = "1"
+# "2": warm start (D4), the pipeline starts pre-filled instead of empty.
+EVENT_ORDER_VERSION = "2"
+
+
+def initial_state(cfg: EnvConfig) -> tuple[np.ndarray, np.ndarray]:
+    """SPEC §3 initial state (D4): on hand empty, pipe[i, k] = round(λ_i · season[k]) (slot k arrives on day k).
+
+    If that exceeds C, units are removed one at a time from the largest slot (ties: lowest SKU, then lowest slot),
+    the same rule as clipping. Returns (inv int64[N, L], pipe int64[N, P]). Without it, nothing arrives for
+    τ days and every policy pays forced stockouts (about 15–18 % of the optimal profit; DECISIONS.md).
+    """
+    k = np.arange(cfg.lead_time) % 7
+    # floor(x + 0.5): halves round up, as in the Box mapping (np.rint would round 2.5 to 2)
+    pipe = np.floor(np.asarray(cfg.demand_mean, np.float64)[:, None]
+                    * np.asarray(cfg.season, np.float64)[k][None, :] + 0.5)
+    flat, _ = clip_orders(pipe.astype(np.int64).reshape(1, -1), np.zeros(1, np.int64), cfg.capacity)
+    return np.zeros((cfg.n_skus, cfg.shelf_life), np.int64), flat.reshape(cfg.n_skus, cfg.lead_time)
 
 
 @dataclass(frozen=True)

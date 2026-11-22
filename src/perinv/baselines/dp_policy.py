@@ -99,6 +99,6 @@ def build(ctx) -> DPPolicy:
     if ctx.cfg.n_skus != 1:
         raise ValueError(f"the DP policy is for N = 1 only, got N = {ctx.cfg.n_skus}")
     sol, meta = load_or_solve(ctx.cfg)
-    ctx.run.update(dp=meta | {"value_empty_start": sol.initial_value()})
+    ctx.run.update(dp=meta | {"value_initial_state": sol.initial_value(ctx.cfg)})
     ctx.run.log("dp_ready", **meta)
     return DPPolicy(sol)

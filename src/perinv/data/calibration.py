@@ -11,9 +11,10 @@ Rules (all deterministic; change them here, not by hand in the YAML):
   The source units are a normalized scale (coefficient unknown), so only ratios carry information. The N=1
   cell then matches the team default lambda = 4 (DP size unchanged), and the gap between methods is preserved.
 - Season: the method's day-of-week factors, season[t mod 7] with t = 0 taken as Monday.
-- Capacity: C = round(kappa * 5 * sum(lambda_env of censored_mle)). That is the provisional team rule
-  kappa * 20 * N generalized to unequal lambdas (lambda = 4 gives 20 per SKU). It is the same for every method:
-  capacity is a property of the warehouse, not an estimate. TODO with SPEC section 1.1: replace with O_ref.
+- Capacity: C = round(kappa * O_ref) (SPEC section 1.1), with O_ref measured in the censored_mle world (the
+  true demand) and passed in as `o_ref` {N: value}; scripts/measure_oref.py measures it. Without `o_ref`, the old
+  provisional rule round(kappa * 5 * sum(lambda_env of censored_mle)). Either way it is the same for every method:
+  capacity is a property of the warehouse, not an estimate, and cross-evaluation (D13) requires equal capacity.
 - Costs: the SPEC section 1 defaults (the dataset has no prices).
 """
 
@@ -65,7 +66,7 @@ def select_skus(params: dict[int, dict[str, dict]], n: int) -> list[int]:
 
 
 def build_configs(params: dict[int, dict[str, dict]], ns=(1, 2, 5), kappas=(0.6, 1.0),
-                  methods=("m1", "m3")) -> dict[str, dict]:
+                  methods=("m1", "m3"), o_ref: dict[int, float] | None = None) -> dict[str, dict]:
     """{file stem: YAML dict}. Keys outside EnvConfig (calibration) are provenance only; the loader ignores them."""
     skus_all = select_skus(params, max(ns))
     scale = TARGET_LAMBDA / params[skus_all[0]][SCALE_METHOD]["lambda_base"]
@@ -74,7 +75,12 @@ def build_configs(params: dict[int, dict[str, dict]], ns=(1, 2, 5), kappas=(0.6,
         skus = skus_all[:n]
         true_total = sum(scale * params[s][SCALE_METHOD]["lambda_base"] for s in skus)
         for kappa in kappas:
-            capacity = max(1, round(kappa * CAPACITY_PER_UNIT_DEMAND * true_total))
+            if o_ref is not None:
+                capacity = max(1, round(kappa * o_ref[n]))
+                capacity_rule = f"round(kappa * O_ref), O_ref = {o_ref[n]} ({SCALE_METHOD} world)"
+            else:
+                capacity = max(1, round(kappa * CAPACITY_PER_UNIT_DEMAND * true_total))
+                capacity_rule = f"round(kappa * {CAPACITY_PER_UNIT_DEMAND} * sum(lambda_env, {SCALE_METHOD}))"
             for short in methods:
                 rows = [params[s][METHODS[short]] for s in skus]
                 lam = [round(scale * r["lambda_base"], 6) for r in rows]
@@ -89,7 +95,7 @@ def build_configs(params: dict[int, dict[str, dict]], ns=(1, 2, 5), kappas=(0.6,
                         "source": rows[0]["source"], "estimation_method": METHODS[short], "sku_ids": skus,
                         "lambda_base": [r["lambda_base"] for r in rows], "scale": round(scale, 9),
                         "scale_rule": f"{TARGET_LAMBDA} / lambda_base(sku {skus_all[0]}, {SCALE_METHOD})",
-                        "capacity_rule": f"round(kappa * {CAPACITY_PER_UNIT_DEMAND} * sum(lambda_env, {SCALE_METHOD}))",
+                        "capacity_rule": capacity_rule,
                         "season_t0": "Monday",
                     },
                 }

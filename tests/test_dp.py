@@ -124,13 +124,13 @@ def test_dp_beats_every_constant_order_policy():
 
 @pytest.mark.parametrize("path", ["configs/env/n1_k06.yaml", "configs/env/calibrated/frn_m3_n1_k06.yaml"])
 def test_value_matches_simulated_dp_policy(path):
-    """Acceptance: V[0, empty] equals the DP policy's mean profit on simulated paths (seasonal, fractional λ too)."""
+    """Acceptance: V[0, start] equals the DP policy's mean profit on simulated paths (also seasonal, fractional λ)."""
     cfg = load_env_config(path)
     sol = solve(cfg)
     demand = generate_paths(cfg, "tune", 800, 11)
     profit = evaluate(dp_policy.DPPolicy(sol), PerishableInventoryEnv(cfg), demand).per_path()["profit"]
     se = profit.std(ddof=1) / np.sqrt(len(profit))
-    assert abs(profit.mean() - sol.initial_value()) < 4 * se
+    assert abs(profit.mean() - sol.initial_value(cfg)) < 4 * se
 
 
 def test_n_greater_than_one_is_rejected():
@@ -198,6 +198,6 @@ def test_dp_job_through_the_runner(tmp_path, monkeypatch):
     assert run_matrix(jobs)["done"] == 2
     dp_job = next(j for j in jobs if j.policy == "dp")
     man = read_manifest(dp_job.run_dir)
-    assert man["dp"]["hit"] is False and man["dp"]["value_empty_start"] > 0
+    assert man["dp"]["hit"] is False and man["dp"]["value_initial_state"] > 0
     runs = metrics.run_table(warehouse.connect(tmp_path / "runs")).set_index("policy")
     assert runs.loc["dp", "pct_of_dp"] == pytest.approx(1.0) and runs.loc["const", "pct_of_dp"] < 1.0

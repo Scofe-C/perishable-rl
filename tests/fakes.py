@@ -35,8 +35,9 @@ class FakeEnv:
 
     def reset(self, seed=None, options=None):
         self.demand = np.asarray(options["demand_path"])
-        self.inv = np.zeros((self.n, self.L), np.int64)
-        self.pipe = np.zeros((self.n, self.P), np.int64)
+        from perinv.env.dynamics import initial_state  # the SPEC §3 start; only the day itself is re-implemented here
+
+        self.inv, self.pipe = initial_state(self.cfg)
         self.t = 0
         return self._obs(), {"state": self._state()}
 

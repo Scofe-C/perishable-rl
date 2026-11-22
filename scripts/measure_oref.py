@@ -1,6 +1,7 @@
 """Measure O_ref (SPEC §1.1) and propose C = round(κ · O_ref) for env configs. Reports; never edits configs.
 
     python scripts/measure_oref.py configs/env/n*_k*.yaml configs/env/calibrated/*.yaml
+        --json configs/env/oref_provisional.json      # (one line) read by make_calibrated_configs.py --oref
 
 PROVISIONAL STAND-IN. SPEC defines O_ref with M2's unconstrained (s,S) policy, which does not exist yet. This
 script uses a per-SKU order-up-to policy instead (order S_i − position_i, where position = on hand + in transit),
@@ -14,8 +15,10 @@ Owner: Member 1 (provisional, see docs/STATUS.md M1 checklist).
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 import numpy as np
 
@@ -85,8 +88,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("env_configs", nargs="+")
     ap.add_argument("--crn-root", default="data/crn")
+    ap.add_argument("--json", help="also write {config name: {demand_hash, levels, o_ref}} to this file")
     args = ap.parse_args()
     cache: dict[str, ORef] = {}
+    out: dict[str, dict] = {}
     print(f"{'config':<22} {'N':>2} {'kappa':>5} {'C now':>6} {'S per SKU':<18} {'O_ref':>7} {'C proposed':>10}")
     for path in args.env_configs:
         cfg = load_env_config(path)
@@ -96,6 +101,12 @@ def main() -> int:
         proposed = max(1, round((cfg.kappa or 1.0) * r.o_ref))
         print(f"{cfg.name:<22} {cfg.n_skus:>2} {cfg.kappa!s:>5} {cfg.capacity:>6} {str(r.levels):<18} "
               f"{r.o_ref:>7.2f} {proposed:>10}")
+        out[cfg.name] = {"demand_hash": cfg.demand_hash(), "n_skus": cfg.n_skus, "levels": r.levels,
+                         "o_ref": r.o_ref}
+    if args.json:
+        doc = {"_note": "PROVISIONAL: order-up-to stand-in for M2's (s,S) (scripts/measure_oref.py). Remeasure.",
+               "configs": out}
+        Path(args.json).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
     return 0
 
 

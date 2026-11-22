@@ -23,7 +23,9 @@
 ### 1.1 Capacity tightness κ
 `C = round(κ · O_ref)`, with κ ∈ {0.6, 1.0}. O_ref is the mean total occupancy (on hand + in transit + new
 orders) of the unconstrained (s,S) policy on the `tune` paths. Until M2's (s,S) exists, O_ref is measured
-with a provisional order-up-to stand-in and marked as such. The configs use `κ·20·N` until then.
+with a provisional order-up-to stand-in (`scripts/measure_oref.py` → `configs/env/oref_provisional.json`):
+O_ref = 16 / 32 / 79 for N = 1 / 2 / 5 at λ = 4, so C = 10/16, 19/32, 47/79 for κ = 0.6/1.0. Calibrated configs
+take one capacity for m1 and m3 from the m3 (censored MLE) world's O_ref.
 
 ## 2. State
 At the start of day t:
@@ -55,7 +57,10 @@ P=2: 10,626).
 7. **Reward.** `r = Σ_i [p·sold − c·q − h·held − w·expired − b·lost]`.
 8. `t ← t+1`. At `t = T` the episode is **truncated** (`truncated=True`); it is never terminated. No salvage value.
 
-- **Initial state (D4):** `inv = 0, pipe = 0` (provisional, until the cold-start effect is measured with the DP).
+- **Initial state (D4, warm start):** `inv = 0`, `pipe[i, k] = floor(λ_i · season[k] + 0.5)` (slot k arrives on
+  day k). If that exceeds C, units are removed with the clipping rule over the flattened pipe (ties: lowest SKU,
+  then lowest slot). One implementation: `perinv.env.dynamics.initial_state`. An empty start would force stockouts
+  for τ days (≈ 15–18 % of the optimal profit).
 - **Demand without a CRN path (D5):** `reset()` without `options["demand_path"]` draws each day's demand from
   `self.np_random` (seeded by `reset(seed=...)`). This is the training mode.
 

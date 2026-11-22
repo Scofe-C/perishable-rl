@@ -26,7 +26,7 @@ def main() -> int:
             continue
         sol, meta = load_or_solve(cfg)
         how = "cached" if meta["hit"] else f"solved in {meta['solve_seconds']} s"
-        print(f"{path}: C={cfg.capacity} states={len(sol.space)} V0(empty)={sol.initial_value():.2f} "
+        print(f"{path}: C={cfg.capacity} states={len(sol.space)} V0={sol.initial_value(cfg):.2f} "
               f"({how}) -> {meta['cache']}")
     return 0
 

@@ -1,16 +1,18 @@
 """Write calibrated env configs from a C1 demand_params.parquet (rules: perinv/data/calibration.py).
 
-    python scripts/make_calibrated_configs.py D:/NEU/data/freshretailnet/gold/<revision>/demand_params.parquet
+    python scripts/make_calibrated_configs.py D:/NEU/data/freshretailnet/gold/<revision>/demand_params.parquet \
+        --oref configs/env/oref_provisional.json     # capacity = round(kappa * O_ref of the m3 world)
     python scripts/make_crn_paths.py configs/env/calibrated/*.yaml
 
 Output: configs/env/calibrated/frn_<m1|m3>_n<N>_k<kappa>.yaml (m1 = drop stockout days, m3 = censored MLE).
 """
 
 import argparse
+import json
 
 import yaml
 
-from perinv.data.calibration import build_configs, load_c1
+from perinv.data.calibration import METHODS, SCALE_METHOD, build_configs, load_c1
 from perinv.env.config import load_env_config
 from perinv.utils.generated import publish
 
@@ -22,20 +24,46 @@ def main() -> None:
     ap.add_argument("demand_params")
     ap.add_argument("--out", default="configs/env/calibrated")
     ap.add_argument("--methods", default="m1,m3", help="comma list of m1, m2, m3")
+    ap.add_argument("--oref", help="JSON from scripts/measure_oref.py --json; capacities from the m3 world's O_ref")
     args = ap.parse_args()
 
     methods = tuple(args.methods.split(","))
-    configs = build_configs(load_c1(args.demand_params), methods=methods)   # C1 errors: nothing written
+    o_ref, expected_hash = load_oref(args.oref) if args.oref else (None, {})
+    configs = build_configs(load_c1(args.demand_params), methods=methods, o_ref=o_ref)  # C1 errors: nothing written
     files = {f"{stem}.yaml": yaml.safe_dump(cfg, sort_keys=False, default_flow_style=None)
              for stem, cfg in sorted(configs.items())}
-    # all files validated as EnvConfig before any is written; stale files of these methods are removed
-    written, removed = publish(files, args.out, header=HEADER, validate=load_env_config,
+
+    def validate(path):
+        env = load_env_config(path)
+        want = expected_hash.get(path.stem)
+        if want is not None and env.demand_hash() != want:   # the O_ref was measured on different demand
+            raise ValueError(f"{path.stem}: O_ref file was measured for demand_hash {want}, the new config has "
+                             f"{env.demand_hash()}; rerun scripts/measure_oref.py on the new configs")
+
+    # all files validated before any is written; stale files of these methods are removed
+    written, removed = publish(files, args.out, header=HEADER, validate=validate,
                                owns=lambda p: p.name.startswith(tuple(f"frn_{m}_" for m in methods)))
     for path in written:
         env = load_env_config(path)
         print(f"{path}  N={env.n_skus} C={env.capacity} lambda={list(env.demand_mean)}")
     for path in removed:
         print(f"removed stale {path}")
+
+
+def load_oref(path: str) -> tuple[dict[int, float], dict[str, str]]:
+    """({N: O_ref of the m3 world}, {config name: demand_hash it was measured on}) from measure_oref.py --json."""
+    short = next(k for k, v in METHODS.items() if v == SCALE_METHOD)
+    entries = json.loads(open(path, encoding="utf-8").read())["configs"]
+    o_ref, hashes = {}, {}
+    for name, e in entries.items():
+        if name.startswith(f"frn_{short}_n"):
+            o_ref.setdefault(e["n_skus"], e["o_ref"])
+            if o_ref[e["n_skus"]] != e["o_ref"]:
+                raise ValueError(f"{path}: two O_ref values for N = {e['n_skus']} in the {short} world")
+            hashes[name] = e["demand_hash"]
+    if not o_ref:
+        raise ValueError(f"{path} has no frn_{short}_* entries: measure the calibrated configs first")
+    return o_ref, hashes
 
 
 if __name__ == "__main__":

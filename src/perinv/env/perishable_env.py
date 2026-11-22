@@ -77,8 +77,7 @@ class PerishableInventoryEnv(gym.Env):
             if not np.issubdtype(path.dtype, np.integer) or (path < 0).any():
                 raise ValueError("demand_path must hold non-negative integers")
             self._demand = path.astype(np.int64, copy=True)
-        self.inv = np.zeros((self.n, self.L), np.int64)     # D4: empty start
-        self.pipe = np.zeros((self.n, self.P), np.int64)
+        self.inv, self.pipe = dynamics.initial_state(self.cfg)    # D4: warm start, pipeline pre-filled
         self.t = 0
         return self._obs(), {"state": self._state()}
 

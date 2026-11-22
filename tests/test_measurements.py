@@ -48,7 +48,7 @@ def test_daily_profile_adds_up_to_the_value():
     empty = np.zeros(len(sol.space))
     empty[sol.space.index(np.zeros(sol.space.dim, np.int64))] = 1
     prof = daily_profile(cfg, sol.pi, empty, table)
-    assert prof.reward.sum() == pytest.approx(sol.initial_value()) and prof.occupancy[0] == 0
+    assert prof.reward.sum() == pytest.approx(sol.V[0, empty.argmax()]) and prof.occupancy[0] == 0
     mix = np.full(len(sol.space), 1 / len(sol.space))          # any start distribution
     const = np.full_like(sol.pi, 3)
     assert daily_profile(cfg, const, mix, table).reward.sum() == pytest.approx(

@@ -47,9 +47,14 @@ class Solution:
     V: np.ndarray             # float64[T+1, S]; V[T] = 0
     pi: np.ndarray            # int64[T, S]
 
-    def initial_value(self) -> float:
-        """V[0] of the empty start state (SPEC §3, D4)."""
-        return float(self.V[0, self.space.index(np.zeros(self.space.dim, np.int64))])
+    def start_index(self, cfg: EnvConfig) -> int:
+        """State index of the SPEC §3 initial state (D4 warm start)."""
+        inv, pipe = dynamics.initial_state(cfg)
+        return int(self.space.index(self.space.from_env(inv[0], pipe[0])))
+
+    def initial_value(self, cfg: EnvConfig) -> float:
+        """V[0] of the SPEC §3 initial state: the expected profit of an episode under the optimal policy."""
+        return float(self.V[0, self.start_index(cfg)])
 
 
 def _ranges(lengths: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
