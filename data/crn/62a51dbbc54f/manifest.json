@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "root_seed": 2026,
+  "params": {
+    "N": 5,
+    "lambda": [
+      4.0,
+      4.0,
+      4.0,
+      4.0,
+      4.0
+    ],
+    "season": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "T": 30,
+    "scenario": [
+      {
+        "kind": "outage",
+        "start": [
+          5,
+          25
+        ],
+        "duration": 2,
+        "magnitude": 0.0,
+        "skus": null
+      }
+    ]
+  },
+  "files": {
+    "tune": {
+      "n_paths": 50,
+      "sha256": "c01562888e4db912455b7d175015edde58754851c97744ca2d565af879d9b2b9"
+    },
+    "test": {
+      "n_paths": 100,
+      "sha256": "4f1cc59431250236f898c8eae7d37bf46d4c8f5c44d81ea64e21e078741123e7"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "root_seed": 2026,
+  "params": {
+    "N": 1,
+    "lambda": [
+      4.0
+    ],
+    "season": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "T": 30,
+    "scenario": [
+      {
+        "kind": "spike",
+        "start": [
+          7,
+          22
+        ],
+        "duration": 3,
+        "magnitude": 3.0,
+        "skus": null
+      }
+    ]
+  },
+  "files": {
+    "tune": {
+      "n_paths": 50,
+      "sha256": "43df9fe165158f7bc6ecaa7562bfbadfb0a0de53f85f650faa6726bed091fdbc"
+    },
+    "test": {
+      "n_paths": 100,
+      "sha256": "07582cb9655e1262392f7f3a120fbcd9f3b65f885986359930356a41d392f512"
+    }
+  }
+}

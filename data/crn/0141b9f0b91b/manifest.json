@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "root_seed": 2026,
+  "params": {
+    "N": 5,
+    "lambda": [
+      4.0,
+      4.0,
+      4.0,
+      4.0,
+      4.0
+    ],
+    "season": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "T": 30,
+    "scenario": [
+      {
+        "kind": "drop",
+        "start": [
+          5,
+          20
+        ],
+        "duration": 7,
+        "magnitude": 0.4,
+        "skus": null
+      }
+    ]
+  },
+  "files": {
+    "tune": {
+      "n_paths": 50,
+      "sha256": "5b934435cc138e0e00b576d2277145573cffe288fc13679d7f6670a2aff5a3dc"
+    },
+    "test": {
+      "n_paths": 100,
+      "sha256": "49889a3a158f0264bf0e3b9f4c7832e2c27e4911cef9689406a8c66456cbd22e"
+    }
+  }
+}
