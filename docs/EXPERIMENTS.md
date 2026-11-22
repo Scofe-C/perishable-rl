@@ -18,3 +18,9 @@ If compute runs short, first cut seeds from 5 to 3 (`run_matrix.py --seeds 0,1,2
 ## Metrics
 Mean profit (with CI) · % of DP (N=1; target ≥ 95%) · waste rate = expired / ordered · fill rate = sold / demand ·
 capacity utilisation = mean occupancy / C · learning curve (profit vs actual steps) · CPU-hours per run.
+
+## Extension groups (outside the core matrix; core results never depend on them)
+| Matrix | Groups | Question | Compare with |
+|---|---|---|---|
+| `configs/experiments/calibrated.yaml` | D1, D3, D13, DP1/DP3/DP13 | What does a policy lose when its demand was calibrated from sales that ignore stockouts? | `metrics.paired_groups(con, "D13", "D3")` |
+| `configs/experiments/shocks.yaml` | A_*/B_* (spike, drop, outage, shift, noisy) | What does a policy trained on base demand lose under demand shocks? (eval only) | `metrics.paired_worlds(con, "A_spike", "A")` |

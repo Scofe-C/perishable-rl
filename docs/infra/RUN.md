@@ -75,4 +75,5 @@ docker compose -f infra/compose.yaml run --rm test   # infra side
 | PyYAML build asks for Visual C++ | `PYYAML_FORCE_LIBYAML=0` before `pip install` |
 | `no CRN paths for ...` | Run `make_crn_paths.py` for those env configs |
 | Every job shows `blocked (no builder yet)` | Expected until `perinv.train.train:build` and the baseline builders exist |
+| A run is `failed` | Read `runs/<run_name>/failure.json` (`stage`, `type`, `message`); `WorkerCrashed` = the process died (out of memory?) |
 | `eval schema vX, reader expects vY` | Rerun the matrix: stale runs are re-evaluated automatically |

@@ -21,8 +21,11 @@ Hugging Face FreshRetailNet-50K (pinned commit)
         ┌───────────────────────────────┘
         ▼   team repo
  scripts/make_calibrated_configs.py ──► configs/env/calibrated/*.yaml
+ scripts/make_shock_configs.py      ──► configs/env/shocks/*.yaml   (eval-only)
                                         │
  configs/env/*.yaml ─────────────────────┤
+                                        ▼
+ scripts/make_crn_paths.py ──► data/crn/<demand_hash>/{tune,test}.npz
                                         ▼
  scripts/run_matrix.py ──► runs/<run_name>/{manifest.json, eval_test.parquet}
                                         │
@@ -34,7 +37,7 @@ Hugging Face FreshRetailNet-50K (pinned commit)
 
 | File | Does |
 |---|---|
-| `runner.py` + `scripts/run_matrix.py` | Matrix YAML → jobs; skips finished runs; K parallel workers; resumes after a kill; cross-evaluation (`eval_envs`: build on A, score on B, reuse A's model) |
+| `runner.py` + `scripts/run_matrix.py` | Matrix YAML → jobs; skips finished runs; K parallel jobs, one process each (a crash fails only that job); resumes after a kill; cross-evaluation (`eval_envs`: build on A, score on B, reuse A's model) |
 | `utils/run_io.py` | `train_key` / `run_key`; manifest; status `running → done/failed`; `failure.json`; `log.jsonl` |
 | `utils/atomic.py` | Write to `.tmp`, then rename (no half-written files) |
 | `eval/evaluate.py` | The only evaluation loop; one seed per CRN path |
@@ -43,9 +46,11 @@ Hugging Face FreshRetailNet-50K (pinned commit)
 | `eval/metrics.py`, `eval/stats.py` | Report tables; IQM + bootstrap CI; paired per-path differences |
 | `scripts/analyze.py` | `runs.csv`, `summary.csv`, `profit_<group>.png` |
 | `data/calibration.py` + `scripts/make_calibrated_configs.py` | C1 file → env YAML (SKU selection, scale, capacity) |
-| `configs/experiments/core.yaml`, `calibrated.yaml` | Matrices: core (124 jobs); group D (24 jobs: D1, D3, D13 cross-evaluation, DP at N=1) |
+| `data/scenarios.py` + `scripts/make_shock_configs.py` | Demand shocks on CRN eval paths, coupled to the base paths |
+| `utils/generated.py` | Generated configs: validate all before writing, remove stale ones |
+| `configs/experiments/` | `core.yaml` (124 jobs), `calibrated.yaml` (group D), `shocks.yaml` (A_*/B_*) |
 
-Contract: [WAREHOUSE.md](../WAREHOUSE.md). Members plug in by writing `build(ctx) -> Policy` (WAREHOUSE.md §8).
+Contract: [WAREHOUSE.md](../WAREHOUSE.md). Members plug in by writing `build(ctx) -> Policy` (WAREHOUSE.md §7).
 
 ## Data platform (`infra/`)
 

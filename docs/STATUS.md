@@ -1,133 +1,73 @@
 # Project status
 
-> Keep this file current. Whoever finishes a step updates "Current step" and adds a line to "History".
-> Agents: read this first, then [SPEC.md](SPEC.md).
+> Keep this current. Whoever finishes a step updates "Current step" and adds one line to "History".
+> Agents: read this first, then [SPEC.md](SPEC.md). Project summary: [README.md](../README.md).
 
-**Last updated:** 2026-11-13 · **Phase:** Week 1, Day 1 (skeleton and Python 3.15 env done; contracts not yet ratified)
-
-## Where this project comes from
-The source is the team draft *"Perishable Inventory RL Project: Datasets, Methods and Experiment Plan"*
-(Nov 12, 2026). In short:
-- We compare PPO, A2C, SAC (Box actions) and DQN, MaskablePPO (discrete, N=1 only) using
-  Stable-Baselines3 / sb3-contrib. We do not rewrite algorithms.
-- One shared Gymnasium env: perishable stock tracked by age bucket, FIFO issuing, fixed lead time τ,
-  Poisson demand, lost sales, and a shared capacity C across SKUs.
-- References: exact DP for N=1 ("% of optimal"); (s,S) and newsvendor for N≥2.
-- Fair comparison: the same env-step budget, 10 tuning trials per algorithm, the same 100 CRN test
-  paths with paired per-path differences, and IQM with bootstrap CIs (via scipy; rliable was dropped, see DECISIONS.md).
-- About 110 runs, CPU only. The timeline is 5 weeks.
-
-Those decisions now live in [SPEC.md](SPEC.md) (contracts), [EXPERIMENTS.md](EXPERIMENTS.md)
-(matrix and rules) and [DECISIONS.md](DECISIONS.md) (changes).
+**Last updated:** 2026-11-22 · **Phase:** Week 1. The M3 pipeline is done. The M1 env and DP start now on
+branch `zhengxin-m1-env` (Zhengxin covers M1 as well as M3).
 
 ## Current step
-**Week 1: ratify contracts, then build the thinnest end-to-end run.**
+**Build the M1 core, then the thinnest end-to-end run.** Units, each reviewed before the next:
+U1 `env/dynamics.py` → U2 env + wrappers → U3 DP.
 
-Done: **Python 3.15 environment and pinned requirements.** Every teammate should install Python 3.15
-(python.org installer on macOS, deadsnakes on Ubuntu, or `scripts/setup_linux_vm.sh`), then run
-`python3.15 -m venv .venv && pip install -r requirements.txt -r requirements-dev.txt -e .`.
+Blockers:
+1. **SPEC.md is a draft.** D1–D6 (DECISIONS.md) are written in and need the other two members' confirmation.
+2. **No env, training or baselines yet**, so every runner job shows `blocked (no builder yet)`. The pipeline
+   is tested end to end only with the `tests/fakes.py` test double.
+3. **Repo admin:** the CODEOWNERS handles are placeholders, and CI has not run on Python 3.15.
 
-Blockers to clear first:
-1. **SPEC.md is a DRAFT.** The event order (§3), action mappings (§4) and default parameters (§1)
-   need agreement from all three members before anyone implements the env.
-2. **Confirm two scaffold decisions** in DECISIONS.md: Python 3.15, and dropping rliable for scipy-based IQM/CI.
-3. **Repo admin.** Nothing is committed yet: the files are staged, there's no git remote, and the CODEOWNERS handles are placeholders.
-   CI on Python 3.15 has not run yet because there's no remote.
-
-Then, in parallel (see README owner table):
-- **M1:** `env/dynamics.py`, `env/perishable_env.py`, `env/wrappers.py` and their tests. Next come the DP and the conformance test.
-- **M2:** `agents/factory.py`, `agents/sb3_policy.py`, `train/train.py` and `callbacks.py`, and the newsvendor baseline.
-- **M3:** `eval/evaluate.py` and `metrics.py`. Generate and commit CRN paths with `python scripts/make_crn_paths.py configs/env/*.yaml`.
-- **All, by Friday:** `scripts/smoke_e2e.py` (N=1 → PPO 10k steps → 5 paths → plot), `bench_vecenv.py`,
+Next, by owner (README has the owner table):
+- **M1:** see the checklist below.
+- **M2:** `agents/factory.py`, `agents/sb3_policy.py` (it must return order quantities; DECISIONS 2026-11-22),
+  `train/train.py` + `callbacks.py`, and the (s,S) and newsvendor baselines, all as `build(ctx) -> Policy`
+  (WAREHOUSE §8).
+- **M3:** conformance test of `tests/fakes.py` against `dynamics.py` once U1 lands; training on demand shocks
+  (unit D) once M2's `train.build` exists.
+- **All, by Friday:** `scripts/smoke_e2e.py` (N=1 → PPO 10k steps → 5 paths → plot) and `bench_vecenv.py`,
   then set `train_env_steps` in `configs/budget.yaml`.
 
-### M1 checklist additions (proposed by M3, 2026-11-22; from the team draft and the M3 pipeline work)
-Items 1, 2 and 5 change contracts: settle them at the SPEC ratification meeting.
-
-Must have (others are blocked, or results are silently wrong):
-1. [ ] **Measure O_ref and fix C per κ** (SPEC §1.1 week-1 TODO, currently unowned). It needs the env plus an
-   unconstrained (s,S). Write `scripts/measure_oref.py` and record the result in DECISIONS.md. Until then every
-   capacity is the provisional `κ·20·N`.
-2. [ ] **Action-mapping endpoints.** With `sigmoid(4·a0)`, a0 = ±1 maps exactly to 0 and R only while R is below
-   about 28 (hand calculation, not yet run). n5_k06 has C = 60, so both endpoints fail at N = 5. Decide the fix
-   in SPEC §4.1: either a scale derived from R or hard endpoints.
-3. [ ] **DP demand truncation must match the env.** Fold the Poisson tail mass into the truncation point and use
-   the analytic expected lost sales. Acceptance test: `V[0, s0]` agrees with the DP policy's mean profit on the
-   100 test paths, within its CI.
-4. [ ] **DP handles seasonality and fractional λ** (calibrated N=1 configs for groups DP1/DP3/DP13): use λ·season[t mod 7] at each step t.
-5. [ ] **Clipping rule as deterministic pseudocode** in SPEC §3. "Largest orders first" leaves ties open.
-   `tests/fakes.py` removes one unit at a time from the current largest order, with ties going to the lowest index.
+## M1 checklist
+Must have:
+1. [ ] U1–U3: dynamics, env, wrappers and DP, replacing the five M1 skips in `tests/test_pending_guards.py`.
+2. [ ] **O_ref → C per κ** (`scripts/measure_oref.py`). Use a provisional order-up-to stand-in until M2's (s,S)
+   exists, then remeasure. Record the result in DECISIONS.md. Until then capacity = `κ·20·N`.
+3. [ ] **Exact DP.** Demand d ≥ I (on hand after arrival) all lead to the same next state, so that row is weighted
+   by P(D ≥ I), and the lost-sales term is added analytically as −b·E[(D−I)⁺]. No truncation is needed.
+   Acceptance: `V[0, s0]` agrees with the DP policy's mean profit on the 100 test paths, within the CI.
+4. [ ] **DP with seasonality and fractional λ:** the calibrated N=1 configs (groups DP1/DP3/DP13).
 
 Should have:
-6. [ ] **Conformance test for `tests/fakes.py` against `dynamics.py`.** The fake is a second transition
-   implementation, which the project rules allow only with a conformance test (M3 will do this once dynamics lands).
-7. [ ] **Cold start and end-of-horizon effect.** Use the DP to compare V from an empty start with V from a steady-state start, then decide the initial state before SPEC freezes.
-8. [ ] **Env step and DP benchmarks.** Measure the env step time, which feeds `bench_vecenv.py` and `train_env_steps`. Measure the DP runtime: at C=20 there are about 53k states × 21 actions × 30 days, so vectorise it.
+5. [ ] **Cold-start effect** (D4): compare V from an empty start with V from a steady-state start.
+6. [ ] **Benchmarks:** env step time (feeds `bench_vecenv.py` and `train_env_steps`) and DP runtime.
 
-Optional (skipped by default in the draft):
-9. [ ] **BSP-low-EW baseline** (Haijema & Minner 2019): a strong, age-aware reference for N ≥ 2, where only (s,S) and the newsvendor exist now.
-10. [ ] **Cross-check the DP against mdpax** (Farrington et al.) on a small instance.
+Optional:
+7. [ ] BSP-low-EW baseline (Haijema & Minner 2019), a strong age-aware reference for N ≥ 2.
+8. [ ] Cross-check the DP against mdpax (Farrington et al.) on a small instance.
 
-## What exists vs. what is a stub
-| Status | Files |
+Done by decision: the mapping endpoints (D1) and the clipping rule (D2).
+
+## What exists
+| Status | What |
 |---|---|
-| Working + tested | `env/config.py` (EnvConfig, YAML loader, hashes), `data/crn.py` (generate/write/load with manifest sha256 check), `scripts/make_crn_paths.py`, `utils/seeding.py`, `utils/run_io.py`, `baselines/base.py` (Policy protocol) |
-| Docstring stub only | everything else in `src/perinv/` and `scripts/`; each docstring names its owner and contract |
-| Provisional values | `configs/env/*.yaml` capacity = round(κ·20·N) until O_ref is measured; cost params in SPEC §1 |
-| Tests | `tests/test_config_and_crn.py` (9 pass); `tests/test_pending_guards.py` (8 skipped TODOs, one per pitfall: replace each with a real test) |
+| Working + tested | `env/config.py`, `data/` (CRN, calibration, scenarios), `eval/` (evaluate, writer, warehouse, metrics, stats), `runner.py`, `utils/`, `baselines/base.py`; scripts `make_crn_paths`, `make_calibrated_configs`, `make_shock_configs`, `run_matrix`, `analyze`; infra data platform (`infra/`) |
+| Stub (docstring only) | `env/dynamics.py`, `env/perishable_env.py`, `env/wrappers.py`, `dp/`, `baselines/{dp_policy,s_S,newsvendor}.py`, `agents/`, `train/`; scripts `smoke_e2e`, `bench_vecenv`, `solve_dp` |
+| Provisional values | capacities (`κ·20·N`), cost parameters (SPEC §1) |
+| Tests | 107 passed, 8 skipped (the pending pitfall guards), plus 1 slow test (`pytest -m slow`) |
 
-Last check (2026-11-13, Python 3.15.2, macOS arm64):
-- `pip check` is clean, `ruff check .` is clean, and `pytest -q` gives 9 passed, 8 skipped.
-- A fresh venv installed from the pins matches the dev venv exactly.
-- Short training runs of PPO, SAC, DQN and A2C (with SubprocVecEnv) work on toy Gymnasium envs, and MaskablePPO imports.
-- A scipy IQM bootstrap CI works.
-- Linux x86_64 cp315 wheels exist for every pin, including torch 2.15.0+cpu. PyYAML builds from its pure-Python sdist.
-
-Gotcha: SubprocVecEnv fails if the script is fed through stdin or lacks the `__main__` guard (macOS/3.15
-use forkserver/spawn). Always run real script files.
+Platform notes:
+- Final experiments run on Linux or WSL2. Development also works on native Windows (docs/infra/RUN.md).
+- On Windows without MSVC, install with `PYYAML_FORCE_LIBYAML=0` (there is no cp315 wheel).
+- SubprocVecEnv and the runner use spawn: always run real script files with an `if __name__ == "__main__":` guard.
 
 ## History
-- 2026-11-22 (M3): Pipeline robustness (fault injection, `tests/test_faults.py`). Fixed defects found by probes:
-  - A worker that died hard (segfault, OOM kill) failed every job in flight with it: `--jobs K` now runs each job in its own spawned process, and the crashed run is marked `failed` with `failure.json` (`WorkerCrashed`, last stage).
-  - A NaN reward passed validation (`NaN > tol` is False): the writer now rejects non-finite rewards.
-  - Policy actions were never checked: `evaluate` rejects non-numeric, wrong-size, NaN, fractional or negative orders, naming the path and day. Orders above capacity are still left to the env (DQN). Fractional or NaN `info` quantities are rejected instead of being truncated into int32.
-  - Missing CRN paths stopped at the first one: `plan()` lists every blocked job, `--dry-run` shows them, and a real run refuses to start with the full `make_crn_paths.py` command.
-  - Config generators now validate every file before writing any, and remove their own stale generated files (`utils/generated.py`).
-
-  Result: 106 passed, 8 skipped, plus 1 slow test (the parallel and kill/resume tests passed 8 times in a row).
-- 2026-11-22 (M3): Demand-shock scenarios (extension, eval-only; DECISIONS.md). `data/scenarios.py`, optional `EnvConfig.scenario`, `scripts/make_shock_configs.py` → `configs/env/shocks/` (5 presets × n1_k06, n5_k06), `configs/experiments/shocks.yaml` (groups A_*/B_*), `metrics.paired_worlds`. Runner guards: scenario configs never train; shock eval must keep the base demand. Loader rejects unknown YAML keys. Result: 84 passed, 8 skipped, plus 1 slow test.
-- 2026-11-14 (M3): Added cross-evaluation to the runner. `eval_envs` in a matrix group builds on A and scores on B (demand may differ, nothing else), and reuses A's trained model. The warehouse pairs on the eval world; `metrics.paired_groups` gives the Q4 calibration cost; group D now has D13 and DP13. Also fixed a Windows-only race: a parallel worker reading a manifest made another worker's final `os.replace` fail, which left that run stuck at `running`.
-- 2026-11-14 (M3): Real-data calibration:
-  - `perinv/data/calibration.py` and `scripts/make_calibrated_configs.py` turn the infra C1 file into `configs/env/calibrated/*.yaml` (12 files: m1/m3 × N 1,2,5 × κ 0.6,1.0).
-  - `configs/experiments/calibrated.yaml` defines group D.
-  - Docs for M3 infra: `docs/infra/STRUCTURE.md` and `docs/infra/RUN.md`.
-  - Open item: cross-evaluation (build on m1, evaluate on m3) is not in the runner yet.
-- 2026-11-14 (M3): Warehouse reader and analysis done. Phase 1 infra is complete.
-  - `eval/warehouse.py`: `connect()` sees done runs only and uses fixed types.
-  - `eval/sql/views.sql`: the views `v_step`, `v_path`, `v_day`, `v_run` and `v_vs_dp`. Every metric is defined here once.
-  - `eval/metrics.py` and `eval/stats.py`: IQM, percentile bootstrap and paired differences.
-  - `scripts/analyze.py`: writes `runs.csv`, `summary.csv` and `profit_<group>.png`.
-
-  Result: 50 passed, 8 skipped, plus 1 slow test.
-- 2026-11-14 (M3): Runner done: `src/perinv/runner.py`, `scripts/run_matrix.py` and `configs/experiments/core.yaml` (124 jobs).
-  - Skips finished runs, runs K jobs in parallel (spawn), and a failure in one job does not stop the others.
-  - Resumes after a hard kill. This is tested with a real subprocess (`-m slow`).
-  - Builders are plugged in as "module:function" (WAREHOUSE.md §8). Every job is "blocked" until `train.build` and the baseline builders exist.
-
-  Result: 38 passed, 8 skipped, plus 1 slow test.
-- 2026-11-14 (M3): Rewrote `utils/run_io.py` per WAREHOUSE.md §4:
-  - `train_key` / `run_key` (no git SHA)
-  - `run_context` (running → done/failed, `failure.json`, `log.jsonl`)
-  - `run_status`
-  - `official` mode refuses a dirty tree
-  - package list via `importlib.metadata`. The old `pip freeze` silently returned nothing in pip-less (uv) venvs.
-
-  `tests/test_run_io.py` added. Result: 30 passed, 8 skipped.
-- 2026-11-14 (M3): `eval/evaluate.py`, `eval/writer.py` and `utils/atomic.py` are implemented against docs/WAREHOUSE.md and tested with a SPEC §3 test double (`tests/fakes.py`). Result: 19 passed, 8 skipped. A file for 100 paths × 30 days is 2–5 bytes/row and takes about 10 ms to write.
-- 2026-11-14 (M3): Added duckdb 2.0.0 (see DECISIONS.md). Verified the pinned env on native Windows with Python 3.15.2: 9 passed, 8 skipped, ruff clean. PyYAML has no Windows cp315 wheel, so install it with `PYYAML_FORCE_LIBYAML=0` to skip the C extension when no MSVC is present.
-- 2026-11-13: The plan was turned into a repo skeleton. Docker was dropped because nothing is
-  deployed; pinned requirements plus `scripts/setup_linux_vm.sh` cover Linux runs. CRN paths
-  generated during the smoke check were deleted so they can be regenerated with the pinned env.
-- 2026-11-13: Homebrew 3.12 was broken, so we moved to Python 3.15.2. Requirements are pinned
-  (36 runtime packages, no pre-releases), and rliable was dropped because it is incompatible with
-  pandas 3. Install, tests and SB3 training were verified. CRN paths are still to be generated.
+- 2026-11-22 (M1): Branch `zhengxin-m1-env`. SPEC decisions D1–D6 and the DP state-count correction; docs trimmed.
+- 2026-11-22 (M3): YAML `x-` annotations; M1 checklist from the team draft.
+- 2026-11-22 (M3): Robustness (`tests/test_faults.py`). Each parallel job runs in its own process, so a hard crash fails only that job (`WorkerCrashed`). NaN rewards are rejected. Policy actions are checked. A missing CRN path blocks the run with the full fix command. The config generators are all-or-nothing and drop stale files.
+- 2026-11-22 (M3): Demand-shock scenarios, eval-only (`data/scenarios.py`, `configs/experiments/shocks.yaml`, `metrics.paired_worlds`).
+- 2026-11-14 (M3): Cross-evaluation (`eval_envs`: build on A, score on B, reuse A's model); fixed a Windows manifest-rename race.
+- 2026-11-14 (M3): Real-data calibration: infra C1 → `configs/env/calibrated/` (12 configs) and group D.
+- 2026-11-14 (M3): Warehouse: DuckDB views (`eval/sql/views.sql`), IQM + bootstrap CIs, `scripts/analyze.py`.
+- 2026-11-14 (M3): Runner: idempotent matrix (`run_key`), skip done, K parallel workers, resume after a kill.
+- 2026-11-14 (M3): `run_io` (keys, manifest, status lifecycle), `evaluate` + validated Parquet writer, `utils/atomic`.
+- 2026-11-14 (M3): Added duckdb 2.0.0; verified the pinned env on native Windows.
+- 2026-11-13: Repo skeleton from the team draft; Python 3.15.2 with pinned requirements; rliable dropped.
