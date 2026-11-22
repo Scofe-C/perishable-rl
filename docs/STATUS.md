@@ -41,6 +41,33 @@ Then, in parallel (see README owner table):
 - **All, by Friday:** `scripts/smoke_e2e.py` (N=1 → PPO 10k steps → 5 paths → plot), `bench_vecenv.py`,
   then set `train_env_steps` in `configs/budget.yaml`.
 
+### M1 checklist additions (proposed by M3, 2026-11-22; from the team draft and the M3 pipeline work)
+Items 1, 2 and 5 change contracts: settle them at the SPEC ratification meeting.
+
+Must have (others are blocked, or results are silently wrong):
+1. [ ] **Measure O_ref and fix C per κ** (SPEC §1.1 week-1 TODO, currently unowned). It needs the env plus an
+   unconstrained (s,S). Write `scripts/measure_oref.py` and record the result in DECISIONS.md. Until then every
+   capacity is the provisional `κ·20·N`.
+2. [ ] **Action-mapping endpoints.** With `sigmoid(4·a0)`, a0 = ±1 maps exactly to 0 and R only while R is below
+   about 28 (hand calculation, not yet run). n5_k06 has C = 60, so both endpoints fail at N = 5. Decide the fix
+   in SPEC §4.1: either a scale derived from R or hard endpoints.
+3. [ ] **DP demand truncation must match the env.** Fold the Poisson tail mass into the truncation point and use
+   the analytic expected lost sales. Acceptance test: `V[0, s0]` agrees with the DP policy's mean profit on the
+   100 test paths, within its CI.
+4. [ ] **DP handles seasonality and fractional λ** (calibrated N=1 configs for groups DP1/DP3/DP13): use λ·season[t mod 7] at each step t.
+5. [ ] **Clipping rule as deterministic pseudocode** in SPEC §3. "Largest orders first" leaves ties open.
+   `tests/fakes.py` removes one unit at a time from the current largest order, with ties going to the lowest index.
+
+Should have:
+6. [ ] **Conformance test for `tests/fakes.py` against `dynamics.py`.** The fake is a second transition
+   implementation, which the project rules allow only with a conformance test (M3 will do this once dynamics lands).
+7. [ ] **Cold start and end-of-horizon effect.** Use the DP to compare V from an empty start with V from a steady-state start, then decide the initial state before SPEC freezes.
+8. [ ] **Env step and DP benchmarks.** Measure the env step time, which feeds `bench_vecenv.py` and `train_env_steps`. Measure the DP runtime: at C=20 there are about 53k states × 21 actions × 30 days, so vectorise it.
+
+Optional (skipped by default in the draft):
+9. [ ] **BSP-low-EW baseline** (Haijema & Minner 2019): a strong, age-aware reference for N ≥ 2, where only (s,S) and the newsvendor exist now.
+10. [ ] **Cross-check the DP against mdpax** (Farrington et al.) on a small instance.
+
 ## What exists vs. what is a stub
 | Status | Files |
 |---|---|
