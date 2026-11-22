@@ -1,6 +1,6 @@
 # SPEC — shared contracts
 
-> **Status: DRAFT.** Decisions D1–D6 (2026-11-22, [DECISIONS.md](DECISIONS.md)) are written in below and wait
+> **Status: DRAFT.** Decisions D1–D7 (2026-11-22, [DECISIONS.md](DECISIONS.md)) are written in below and wait
 > for team confirmation. Once ratified, any change needs all three members and a DECISIONS.md entry.
 >
 > The env, the DP and every agent depend on this file. If the env and the DP read it differently, both
@@ -70,7 +70,9 @@ P=2: 10,626).
   exactly 1, for every R. The plain `σ(4·a[0])` fails both endpoints from R = 28 (measured), and a raw
   `σ(a)` would stay in [0.27, 0.73].
 - `total = clip(floor(share · R + 0.5), 0, R)`
-- `w = softmax(a[1:])`; `q` = largest-remainder rounding of `w · total`, so `sum(q) == total` exactly.
+- `w = softmax(4 · a[1:])` (D7: plain softmax on [−1, 1] caps one SKU at 65 % for N = 5); `q` = largest-remainder
+  rounding of `w · total` (leftover units to the largest fractions, ties to the lowest index), so `sum(q) == total`.
+- Implemented once as `perinv.env.wrappers.capacity_share_orders(a, R)`; the SB3 adapter reuses it.
 
 ### 4.2 Discrete (DQN, MaskablePPO), N = 1 only: wrapper `DiscreteOrder`
 - `action ∈ Discrete(C + 1)`, `q = [action]`.

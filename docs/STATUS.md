@@ -8,10 +8,10 @@ branch `zhengxin-m1-env` (Zhengxin covers M1 as well as M3).
 
 ## Current step
 **Build the M1 core, then the thinnest end-to-end run.** Units, each reviewed before the next:
-~~U1 `env/dynamics.py`~~ (done) → **U2 env + wrappers** → U3 DP.
+~~U1 dynamics~~ → ~~U2 env + wrappers~~ (done) → **U3 DP**.
 
 Blockers:
-1. **SPEC.md is a draft.** D1–D6 (DECISIONS.md) are written in and need the other two members' confirmation.
+1. **SPEC.md is a draft.** D1–D7 (DECISIONS.md) are written in and need the other two members' confirmation.
 2. **No env, training or baselines yet**, so every runner job shows `blocked (no builder yet)`. The pipeline
    is tested end to end only with the `tests/fakes.py` test double.
 3. **Repo admin:** the CODEOWNERS handles are placeholders, and CI has not run on Python 3.15.
@@ -28,7 +28,7 @@ Next, by owner (README has the owner table):
 
 ## M1 checklist
 Must have:
-1. [ ] U1–U3: dynamics (done), env, wrappers and DP, replacing the M1 skips in `tests/test_pending_guards.py`.
+1. [ ] U1–U3: dynamics and env + wrappers done; DP next (two M1 skips left in `tests/test_pending_guards.py`).
 2. [ ] **O_ref → C per κ** (`scripts/measure_oref.py`). Use a provisional order-up-to stand-in until M2's (s,S)
    exists, then remeasure. Record the result in DECISIONS.md. Until then capacity = `κ·20·N`.
 3. [ ] **Exact DP.** Demand d ≥ I (on hand after arrival) all lead to the same next state, so that row is weighted
@@ -49,10 +49,10 @@ Done by decision: the mapping endpoints (D1) and the clipping rule (D2).
 ## What exists
 | Status | What |
 |---|---|
-| Working + tested | `env/config.py`, `env/dynamics.py`, `data/` (CRN, calibration, scenarios), `eval/` (evaluate, writer, warehouse, metrics, stats), `runner.py`, `utils/`, `baselines/base.py`; scripts `make_crn_paths`, `make_calibrated_configs`, `make_shock_configs`, `run_matrix`, `analyze`; infra data platform (`infra/`) |
-| Stub (docstring only) | `env/perishable_env.py`, `env/wrappers.py`, `dp/`, `baselines/{dp_policy,s_S,newsvendor}.py`, `agents/`, `train/`; scripts `smoke_e2e`, `bench_vecenv`, `solve_dp` |
+| Working + tested | `env/` (config, dynamics, env, wrappers), `data/` (CRN, calibration, scenarios), `eval/` (evaluate, writer, warehouse, metrics, stats), `runner.py`, `utils/`, `baselines/base.py`; scripts `make_crn_paths`, `make_calibrated_configs`, `make_shock_configs`, `run_matrix`, `analyze`; infra data platform (`infra/`) |
+| Stub (docstring only) | `dp/`, `baselines/{dp_policy,s_S,newsvendor}.py`, `agents/`, `train/`; scripts `smoke_e2e`, `bench_vecenv`, `solve_dp` |
 | Provisional values | capacities (`κ·20·N`), cost parameters (SPEC §1) |
-| Tests | 126 passed, 7 skipped (the pending pitfall guards), plus 1 slow test (`pytest -m slow`) |
+| Tests | 150 passed, 4 skipped (the pending pitfall guards), plus 2 slow tests (`pytest -m slow`) |
 
 Platform notes:
 - Final experiments run on Linux or WSL2. Development also works on native Windows (docs/infra/RUN.md).
@@ -60,6 +60,7 @@ Platform notes:
 - SubprocVecEnv and the runner use spawn: always run real script files with an `if __name__ == "__main__":` guard.
 
 ## History
+- 2026-11-22 (M1): U2 `PerishableInventoryEnv` (D3–D6) and wrappers `CapacityShareAction` (D1), `DiscreteOrder`; the mapping is the pure function `capacity_share_orders`, which M2's adapter should reuse. Tests: gymnasium and SB3 `check_env`, exact CRN replay, seeded training demand, capacity, masks reaching MaskablePPO through Monitor/DummyVecEnv/SubprocVecEnv, D1 endpoints for every R ≤ 1000, identical `evaluate` results to the test double, and a runner run on the real env. D7: softmax(4·a[1:]), because the plain split capped one SKU at 65 % for N=5.
 - 2026-11-22 (M1): U1 `env/dynamics.py`, the single batched transition (SPEC §3, D2 clipping, `EVENT_ORDER_VERSION = "1"`, so every train_key changes once). Tests: hand-checked days, invariants, batch = loop, and a hypothesis conformance test of `tests/fakes.py` (mutation-checked). Speed: 122 ns/row in batch (DP table), 38 µs per single step.
 - 2026-11-22 (M1): Branch `zhengxin-m1-env`. SPEC decisions D1–D6 and the DP state-count correction; docs trimmed.
 - 2026-11-22 (M3): YAML `x-` annotations; M1 checklist from the team draft.

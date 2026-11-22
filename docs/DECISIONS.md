@@ -5,6 +5,7 @@ Newest first. One entry per change to SPEC.md, the budgets, the fairness rules o
 
 | Date | Who / status | Decision | Why |
 |---|---|---|---|
+| 2026-11-22 | Zhengxin — **team to confirm** | **D7** Box split: `w = softmax(4 · a[1:])` instead of `softmax(a[1:])` (SPEC §4.1; `perinv.env.wrappers.SPLIT_SCALE = 4`) | Agent actions live in [−1, 1], so plain softmax caps one SKU's weight at e/(e + (N−1)/e): 88 % for N = 2, 65 % for N = 5. With R = 60, N = 5, no action can order more than 39 units of one SKU. Scale 4 (same as D1) lifts the cap to 99.9 % and keeps a[1:] = 0 an even split |
 | 2026-11-22 | Zhengxin (M1+M3) — **team to confirm** | **D1** Box mapping uses the rescaled sigmoid `share = (σ(4a₀) − σ(−4)) / (σ(4) − σ(−4))` (SPEC §4.1). This is a new formula, not the "raise the scale" fallback SPEC anticipated | Measured: plain `σ(4a₀)` misses both endpoints from R = 28 (R = 60 gives 1 and 59). The rescaled form is exact at both ends for every R ≤ 1000 and keeps share(0) = 0.5 |
 | 2026-11-22 | Zhengxin — **team to confirm** | **D2** Clipping: while `sum(q) > R`, take one unit off the largest order, ties to the lowest SKU index (SPEC §3) | "Largest orders first" left ties open; the env and the DP must clip identically. Matches `tests/fakes.py` |
 | 2026-11-22 | Zhengxin — **team to confirm** | **D3** `info["occupancy"]` is decision-time occupancy, before the order | Asked for in the old WAREHOUSE §8 (now SPEC §6); `evaluate` already reads it that way |
@@ -20,7 +21,7 @@ Newest first. One entry per change to SPEC.md, the budgets, the fairness rules o
 | 2026-11-13 | scaffold | pip + pinned `requirements.txt`, no Docker for the team runtime; never commit pre-release pins | Nothing is deployed; pins plus `scripts/setup_linux_vm.sh` reproduce Linux runs |
 
 ## Open items for the week-1 meeting
-- [ ] Ratify SPEC.md, including D1–D6
+- [ ] Ratify SPEC.md, including D1–D7
 - [ ] Default cost parameters, λ, L, τ, T (SPEC §1)
 - [ ] Initial state after the cold-start measurement (D4)
 - [ ] O_ref per N and C for κ ∈ {0.6, 1.0} (provisional stand-in first, then M2's (s,S))
