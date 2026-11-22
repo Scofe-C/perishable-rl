@@ -51,4 +51,4 @@ def atomic_path(final: str | Path) -> Iterator[Path]:
 
 def atomic_write_text(final: str | Path, text: str) -> None:
     with atomic_path(final) as tmp:
-        tmp.write_text(text, encoding="utf-8")
+        tmp.write_text(text, encoding="utf-8", newline="\n")   # LF on every OS (.gitattributes)

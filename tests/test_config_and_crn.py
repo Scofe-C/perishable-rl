@@ -39,3 +39,18 @@ def test_crn_manifest_detects_tampering(tmp_path):
     np.savez_compressed(out / "test.npz", demand=np.zeros((4, cfg.horizon, 1), np.int32))
     with pytest.raises(ValueError, match="manifest hash"):
         load_paths(cfg, "test", tmp_path)
+
+
+def test_written_text_files_use_lf(tmp_path):
+    """.gitattributes enforces LF; writers must not emit CRLF on Windows (CRN manifest, run files, log lines)."""
+    from fakes import tiny_config
+
+    from perinv.utils.atomic import atomic_write_text
+    from perinv.utils.run_io import Run
+
+    out = write_paths(tiny_config(), tmp_path / "crn", root_seed=1, sizes={"tune": 1, "test": 1})
+    atomic_write_text(tmp_path / "a.json", "{\n}\n")
+    run = Run(dir=tmp_path, name="r", run_key="k", train_key="t")
+    run.log("event", x=1)
+    for f in (out / "manifest.json", tmp_path / "a.json", tmp_path / "log.jsonl"):
+        assert b"\r" not in f.read_bytes(), f

@@ -53,7 +53,7 @@ def write_paths(cfg: EnvConfig, root: str | Path = "data/crn", root_seed: int = 
         files[split] = {"n_paths": n, "sha256": _sha256(f)}
     manifest = {"version": FORMAT_VERSION, "root_seed": root_seed,
                 "params": cfg.demand_params(), "files": files}
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out_dir
 
 

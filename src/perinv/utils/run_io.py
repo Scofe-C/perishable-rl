@@ -134,7 +134,7 @@ def mark_crashed(run_dir: Path, expected_run_key: str, message: str) -> bool:
     atomic_write_text(run_dir / "failure.json", json.dumps(error, indent=2))
     m.update(status="failed", error=error, end_time=_now())
     atomic_write_text(run_dir / "manifest.json", json.dumps(m, indent=2, default=str))
-    with open(log_file, "a", encoding="utf-8") as fh:
+    with open(log_file, "a", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps({"ts": _now(), "run_key": expected_run_key, "run_name": m.get("run_name"),
                              "stage": stage, "event": "crashed", "message": message}) + "\n")
     return True
@@ -207,7 +207,7 @@ class Run:
         """Append one JSON line to log.jsonl; every line carries run_key, stage and a UTC timestamp."""
         line = {"ts": _now(), "run_key": self.run_key, "run_name": self.name, "stage": self.stage,
                 "event": event, **fields}
-        with open(self.dir / "log.jsonl", "a", encoding="utf-8") as fh:
+        with open(self.dir / "log.jsonl", "a", encoding="utf-8", newline="\n") as fh:
             fh.write(json.dumps(line, default=str) + "\n")
         log.info("%s %s %s", self.name, event, fields)
 
