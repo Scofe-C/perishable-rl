@@ -24,3 +24,21 @@ capacity utilisation = mean occupancy / C · learning curve (profit vs actual st
 |---|---|---|---|
 | `configs/experiments/calibrated.yaml` | D1, D3, D13, DP1/DP3/DP13 | What does a policy lose when its demand was calibrated from sales that ignore stockouts? | `metrics.paired_groups(con, "D13", "D3")` |
 | `configs/experiments/shocks.yaml` | A_*/B_* (spike, drop, outage, shift, noisy) | What does a policy trained on base demand lose under demand shocks? (eval only) | `metrics.paired_worlds(con, "A_spike", "A")` |
+
+## Compute budget (measured 2026-11-22, Windows, i9-13900HX 24 cores, 16 GB; rerun on the Linux box)
+Training dominates everything else. One evaluation run takes about 0.2 s (+0.3 s of SB3 inference); the DP needs
+0.1 s; the warehouse handles 480 runs / 3.8M rows (2.5 B/row) in under a second.
+
+Throughput with SB3 defaults, one torch thread (env steps/s): PPO 2.8k (DummyVecEnv×4), A2C 4.6k, DQN 2.5k,
+MaskablePPO 2.6k, **SAC 0.11k**. SAC variants: train_freq 4 gives 0.41k; net 64×64 gives 0.29k; net 64×64 with
+batch 64 gives 0.34k; 4 envs give 0.45k. Parallel PPO jobs: aggregate speed-up ×6.5 at 8 jobs and ×8.5 at 16
+(8 P-cores, then E-cores).
+
+Runs, including 10 tuning trials per algorithm × cell at the full budget: PPO 100 (with group D), A2C 90, SAC 90,
+DQN 30, MaskablePPO 30. The shock and cross-eval groups reuse trained models (eval only).
+
+| train_env_steps | CPU-h, SB3 default SAC (SAC share) | wall at 16 jobs | CPU-h, SAC train_freq 4 | wall |
+|---|---|---|---|---|
+| 200k | 48 (91 %) | ≈ 6 h | 17 | ≈ 2 h |
+| 500k | 120 (91 %) | ≈ 14 h | 41 | ≈ 5 h |
+| 1M | 239 (91 %) | ≈ 28 h | 83 | ≈ 10 h |
