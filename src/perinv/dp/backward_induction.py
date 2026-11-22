@@ -127,3 +127,34 @@ def evaluate_policy(cfg: EnvConfig, pi: np.ndarray, table: Table | None = None) 
     for t in range(T - 1, -1, -1):
         V[t] = q_values(t, V[t + 1])[np.arange(S), np.minimum(pi[t], feasible)]
     return V
+
+
+@dataclass(frozen=True)
+class DailyProfile:
+    reward: np.ndarray      # float64[T]: expected reward on day t
+    occupancy: np.ndarray   # float64[T]: expected decision-time occupancy on day t
+
+
+def daily_profile(cfg: EnvConfig, pi: np.ndarray, start: np.ndarray, table: Table | None = None) -> DailyProfile:
+    """Exact day-by-day expectations of policy pi from a start distribution over states (float[S], sums to 1).
+    sum(reward) equals the policy's value from that start; used to measure the cold-start effect (D4)."""
+    table = table or build_table(cfg)
+    space, S, C, T = table.space, len(table.space), cfg.capacity, cfg.horizon
+    lam_t = cfg.demand_mean[0] * np.asarray(cfg.season)[np.arange(T) % 7]
+    b = cfg.lost_sales_cost[0]
+    pair_of = np.full((S, C + 1), -1, np.int64)
+    pair_of[table.pair_state, table.pair_order] = np.arange(len(table.pair_state))
+    is_tail = table.row_demand == table.row_on_hand
+    feasible = C - space.occupancy()
+    on_hand = space.on_hand_after_arrival()
+    mu = np.asarray(start, np.float64)
+    reward, occupancy = np.zeros(T), np.zeros(T)
+    for t in range(T):
+        pmf, tail, excess = demand_terms(float(lam_t[t]), C)
+        chosen = np.zeros(len(table.pair_state))
+        chosen[pair_of[np.arange(S), np.minimum(pi[t], feasible)]] = mu      # probability of each (state, order)
+        w = np.where(is_tail, tail[table.row_on_hand], pmf[table.row_demand]) * chosen[table.row_pair]
+        reward[t] = w @ table.row_reward - b * (mu @ excess[on_hand])
+        occupancy[t] = mu @ space.occupancy()
+        mu = np.bincount(table.row_next, weights=w, minlength=S)
+    return DailyProfile(reward, occupancy)
