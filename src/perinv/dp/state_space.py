@@ -69,6 +69,13 @@ class StateSpace:
         return self.states.sum(axis=1)
 
 
+def ranges(lengths: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(owner, offset): for each owner i, offsets 0 … lengths[i]-1, flattened."""
+    owner = np.repeat(np.arange(len(lengths)), lengths)
+    offset = np.arange(lengths.sum()) - np.repeat(np.cumsum(lengths) - lengths, lengths)
+    return owner, offset
+
+
 def expected_count(capacity: int, shelf_life: int, lead_time: int) -> int:
     d = shelf_life - 1 + lead_time
     return comb(capacity + d, d)
@@ -77,17 +84,10 @@ def expected_count(capacity: int, shelf_life: int, lead_time: int) -> int:
 def build(capacity: int, shelf_life: int, lead_time: int) -> StateSpace:
     """Every non-negative integer vector of length D = L-1+P with sum ≤ C, sorted by key."""
     d = shelf_life - 1 + lead_time
-    rows = [np.zeros((1, 0), np.int64)]
-    for _ in range(d):   # extend by one coordinate, keeping the running sum ≤ C
-        out = []
-        for prefix in rows:
-            room = capacity - prefix.sum(axis=1)
-            reps = room + 1
-            base = np.repeat(prefix, reps, axis=0)
-            nxt = np.arange(reps.sum()) - np.repeat(np.cumsum(reps) - reps, reps)
-            out.append(np.concatenate([base, nxt[:, None]], axis=1))
-        rows = [np.concatenate(out)]
-    states = rows[0]
+    states = np.zeros((1, 0), np.int64)
+    for _ in range(d):   # extend by one coordinate 0 … C − (sum so far)
+        owner, nxt = ranges(capacity - states.sum(axis=1) + 1)
+        states = np.concatenate([states[owner], nxt[:, None]], axis=1)
     radix = (capacity + 1) ** np.arange(d, dtype=np.int64)
     keys = states @ radix
     order = np.argsort(keys)

@@ -13,6 +13,7 @@ import numpy as np
 
 from perinv.data.scenarios import SHOCK_STREAM, apply_shocks
 from perinv.env.config import EnvConfig
+from perinv.utils.atomic import atomic_write_text
 
 FORMAT_VERSION = 1
 SPLIT_ID = {"tune": 0, "test": 1}
@@ -25,7 +26,7 @@ def generate_paths(cfg: EnvConfig, split: str, n_paths: int, root_seed: int) -> 
     With a scenario, path k is the base path k plus the shocks, drawn from a separate rng stream
     (perinv.data.scenarios), so it stays paired with the unshocked path k.
     """
-    lam = np.asarray(cfg.demand_mean)[None, :] * np.asarray(cfg.season)[np.arange(cfg.horizon) % 7, None]
+    lam = cfg.daily_lambda()
     out = np.empty((n_paths, cfg.horizon, cfg.n_skus), dtype=np.int32)
     for k in range(n_paths):
         rng = np.random.default_rng([root_seed, SPLIT_ID[split], k])
@@ -53,7 +54,7 @@ def write_paths(cfg: EnvConfig, root: str | Path = "data/crn", root_seed: int = 
         files[split] = {"n_paths": n, "sha256": _sha256(f)}
     manifest = {"version": FORMAT_VERSION, "root_seed": root_seed,
                 "params": cfg.demand_params(), "files": files}
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
+    atomic_write_text(out_dir / "manifest.json", json.dumps(manifest, indent=2) + "\n")
     return out_dir
 
 

@@ -18,14 +18,14 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass, replace
-from pathlib import Path
 
 import numpy as np
 
 from perinv.data.crn import load_paths
-from perinv.env.config import EnvConfig, load_env_config
+from perinv.env.config import EnvConfig, capacity_from_kappa, load_env_config
 from perinv.env.perishable_env import PerishableInventoryEnv
 from perinv.eval.evaluate import evaluate
+from perinv.utils.atomic import atomic_write_text
 from perinv.utils.seeding import init_process
 
 UNCONSTRAINED = 10**6   # capacity that never binds
@@ -50,7 +50,6 @@ class OrderUpTo:
 class ORef:
     levels: list[int]           # best S_i per SKU
     o_ref: float                # mean post-order occupancy, summed over SKUs
-    mean_profit: float          # of the stand-in at those levels, unconstrained
 
 
 def unconstrained(cfg: EnvConfig) -> EnvConfig:
@@ -64,7 +63,7 @@ def _single_sku(cfg: EnvConfig, i: int) -> EnvConfig:
                    lost_sales_cost=pick("lost_sales_cost"), scenario=())
 
 
-def best_level(cfg: EnvConfig, i: int, demand: np.ndarray, max_level: int | None = None) -> tuple[int, float]:
+def best_level(cfg: EnvConfig, i: int, demand: np.ndarray, max_level: int | None = None) -> int:
     """Grid-search S for SKU i alone (unconstrained, so the SKUs do not interact). Ties: the smaller S."""
     one = unconstrained(_single_sku(cfg, i))
     lam_max = cfg.demand_mean[i] * max(cfg.season)
@@ -74,14 +73,14 @@ def best_level(cfg: EnvConfig, i: int, demand: np.ndarray, max_level: int | None
     best = int(np.argmax(profits))
     if best == top:
         raise RuntimeError(f"best S hit the grid edge {top} for SKU {i} of {cfg.name}: widen the grid")
-    return best, float(profits[best])
+    return best
 
 
 def measure(cfg: EnvConfig, demand: np.ndarray) -> ORef:
-    levels = [best_level(cfg, i, demand)[0] for i in range(cfg.n_skus)]
+    levels = [best_level(cfg, i, demand) for i in range(cfg.n_skus)]
     res = evaluate(OrderUpTo(levels), PerishableInventoryEnv(unconstrained(cfg)), demand)
     post_order = (res.qty["occ"] + res.qty["order"]).sum(axis=2)        # [path, day]
-    return ORef(levels, float(post_order.mean()), float(res.per_path()["profit"].mean()))
+    return ORef(levels, float(post_order.mean()))
 
 
 def main() -> int:
@@ -98,7 +97,7 @@ def main() -> int:
         if cfg.demand_hash() not in cache:        # O_ref depends on demand and costs, not on capacity
             cache[cfg.demand_hash()] = measure(cfg, load_paths(cfg, "tune", args.crn_root))
         r = cache[cfg.demand_hash()]
-        proposed = max(1, round((cfg.kappa or 1.0) * r.o_ref))
+        proposed = capacity_from_kappa(cfg.kappa or 1.0, r.o_ref)
         print(f"{cfg.name:<22} {cfg.n_skus:>2} {cfg.kappa!s:>5} {cfg.capacity:>6} {str(r.levels):<18} "
               f"{r.o_ref:>7.2f} {proposed:>10}")
         out[cfg.name] = {"demand_hash": cfg.demand_hash(), "n_skus": cfg.n_skus, "levels": r.levels,
@@ -106,7 +105,7 @@ def main() -> int:
     if args.json:
         doc = {"_note": "PROVISIONAL: order-up-to stand-in for M2's (s,S) (scripts/measure_oref.py). Remeasure.",
                "configs": out}
-        Path(args.json).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+        atomic_write_text(args.json, json.dumps(doc, indent=2) + "\n")
     return 0
 
 

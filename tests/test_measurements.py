@@ -26,13 +26,12 @@ def test_order_up_to_policy():
 
 def test_oref_is_the_sum_of_levels_and_skus_are_independent():
     """Order-up-to keeps the post-order position at exactly S, so O_ref = sum(S_i); identical SKUs get equal S."""
-    cfg = replace(tiny_config(n_skus=2, capacity=40, horizon=20))
+    cfg = tiny_config(n_skus=2, capacity=40, horizon=20)
     demand = generate_paths(cfg, "tune", 20, 0)
     r = measure_oref.measure(cfg, demand)
     assert r.levels[0] == r.levels[1] and r.o_ref == pytest.approx(sum(r.levels))
-    one = replace(cfg, n_skus=1, demand_mean=(4.0,), price=(10.0,), order_cost=(4.0,), holding_cost=(0.1,),
-                  expiry_cost=(2.0,), lost_sales_cost=(2.0,))
-    assert measure_oref.best_level(one, 0, demand[:, :, :1])[0] == r.levels[0]
+    one = tiny_config(n_skus=1, capacity=40, horizon=20)
+    assert measure_oref.best_level(one, 0, demand[:, :, :1]) == r.levels[0]
 
 
 def test_oref_grid_edge_fails_loud():

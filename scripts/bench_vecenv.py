@@ -44,10 +44,14 @@ def raw_steps_per_second(path: str, steps: int) -> float:
     return steps / (time.perf_counter() - t0)
 
 
-def vec_steps_per_second(path: str, kind: str, n_envs: int, steps: int) -> float:
+def make_vec(path: str, kind: str, n_envs: int):
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
-    vec = DummyVecEnv([make(path)] * n_envs) if kind == "dummy" else SubprocVecEnv([make(path)] * n_envs, "spawn")
+    return DummyVecEnv([make(path)] * n_envs) if kind == "dummy" else SubprocVecEnv([make(path)] * n_envs, "spawn")
+
+
+def vec_steps_per_second(path: str, kind: str, n_envs: int, steps: int) -> float:
+    vec = make_vec(path, kind, n_envs)
     try:
         vec.reset()
         rng = np.random.default_rng(0)
@@ -63,9 +67,8 @@ def vec_steps_per_second(path: str, kind: str, n_envs: int, steps: int) -> float
 
 def ppo_steps_per_second(path: str, kind: str, n_envs: int, steps: int) -> float:
     from stable_baselines3 import PPO
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
-    vec = DummyVecEnv([make(path)] * n_envs) if kind == "dummy" else SubprocVecEnv([make(path)] * n_envs, "spawn")
+    vec = make_vec(path, kind, n_envs)
     try:
         model = PPO("MlpPolicy", vec, n_steps=max(64, 2048 // n_envs), batch_size=64, seed=0, device="cpu", verbose=0)
         model.learn(256)   # warm-up: first-call overheads

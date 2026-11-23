@@ -13,7 +13,7 @@ import perinv.env
 from perinv.env.dynamics import EVENT_ORDER_VERSION, clip_orders, initial_state, step
 from perinv.utils.run_io import event_order_version
 
-CFG1 = replace(tiny_config(n_skus=1, capacity=20), horizon=30)   # L=3, tau=2, p/c/h/w/b = 10/4/0.1/2/2
+CFG1 = tiny_config(n_skus=1, capacity=20, horizon=30)   # L=3, tau=2, p/c/h/w/b = 10/4/0.1/2/2
 
 
 def one(cfg, inv, pipe, q, d):

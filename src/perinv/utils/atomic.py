@@ -1,9 +1,11 @@
-"""Atomic file writes: write to `<name>.tmp`, then rename. Readers never see a half-written file."""
+"""Atomic file writes: write to a temp file unique to the writer (`<name>.<pid>.<id>.tmp`), then rename.
+Readers never see a half-written file, and concurrent writers of one path never share a temp file."""
 
 from __future__ import annotations
 
 import os
 import time
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -41,7 +43,7 @@ def atomic_path(final: str | Path) -> Iterator[Path]:
     """
     final = Path(final)
     final.parent.mkdir(parents=True, exist_ok=True)
-    tmp = final.with_name(final.name + ".tmp")
+    tmp = final.with_name(f"{final.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
     try:
         yield tmp
         retry_on_permission_error(lambda: os.replace(tmp, final))

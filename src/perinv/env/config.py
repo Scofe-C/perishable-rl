@@ -7,6 +7,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 from perinv.data.scenarios import Shock, check_fits, parse_scenario
@@ -44,6 +45,12 @@ class EnvConfig:
     @property
     def pipeline_slots(self) -> int:
         return self.lead_time
+
+    def daily_lambda(self) -> np.ndarray:
+        """float64[T, N]: Poisson mean of SKU i on day t, lambda_i * season[t mod 7] (SPEC §3 step 3).
+        The one definition shared by the env (D5), the CRN paths and the DP weights."""
+        return (np.asarray(self.demand_mean, np.float64)[None, :]
+                * np.asarray(self.season, np.float64)[np.arange(self.horizon) % 7, None])
 
     def demand_params(self) -> dict:
         """The subset that determines CRN demand paths (SPEC §7). `scenario` only when set (stable base hashes)."""

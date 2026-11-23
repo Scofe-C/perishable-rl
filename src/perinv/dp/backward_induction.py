@@ -22,7 +22,7 @@ import numpy as np
 from scipy.stats import poisson
 
 from perinv.dp import state_space
-from perinv.dp.state_space import StateSpace
+from perinv.dp.state_space import StateSpace, ranges
 from perinv.env import dynamics
 from perinv.env.config import EnvConfig
 
@@ -60,20 +60,13 @@ class Solution:
         return float(self.V[0, self.start_index(cfg)])
 
 
-def _ranges(lengths: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """(owner, offset): for each owner i, offsets 0 … lengths[i]-1, flattened."""
-    owner = np.repeat(np.arange(len(lengths)), lengths)
-    offset = np.arange(lengths.sum()) - np.repeat(np.cumsum(lengths) - lengths, lengths)
-    return owner, offset
-
-
 def build_table(cfg: EnvConfig) -> Table:
     if cfg.n_skus != 1:
         raise ValueError(f"the exact DP is for N = 1 only, got N = {cfg.n_skus}")
     space = state_space.build(cfg.capacity, cfg.shelf_life, cfg.lead_time)
-    pair_state, pair_order = _ranges(cfg.capacity - space.occupancy() + 1)     # q = 0 … C − occ
+    pair_state, pair_order = ranges(cfg.capacity - space.occupancy() + 1)     # q = 0 … C − occ
     on_hand = space.on_hand_after_arrival()
-    row_pair, row_demand = _ranges(on_hand[pair_state] + 1)                    # d = 0 … I
+    row_pair, row_demand = ranges(on_hand[pair_state] + 1)                    # d = 0 … I
     s = pair_state[row_pair]
     inv, pipe = space.to_env(space.states[s])
     tr = dynamics.step(inv, pipe, pair_order[row_pair][:, None], row_demand[:, None], cfg)
@@ -91,18 +84,28 @@ def demand_terms(lam: float, capacity: int) -> tuple[np.ndarray, np.ndarray, np.
     return pmf, tail, np.maximum(excess, 0.0)
 
 
+def _daily_terms(cfg: EnvConfig) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """demand_terms for each day t (N = 1), computed once per distinct λ (≤ 7)."""
+    lam_t = cfg.daily_lambda()[:, 0]
+    terms = {lam: demand_terms(lam, cfg.capacity) for lam in map(float, np.unique(lam_t))}
+    return [terms[float(lam)] for lam in lam_t]
+
+
+def _row_weights(table: Table, pmf: np.ndarray, tail: np.ndarray) -> np.ndarray:
+    """float64[R]: probability of each row given its (state, order); the d = I row carries P(D ≥ I)."""
+    return np.where(table.row_demand == table.row_on_hand, tail[table.row_on_hand], pmf[table.row_demand])
+
+
 def _backup(cfg: EnvConfig, table: Table):
     """q_values(t, V_next) -> float64[S, C+1]: expected value of each (state, order) on day t, −inf if infeasible."""
     space, S, C = table.space, len(table.space), cfg.capacity
-    lam_t = cfg.demand_mean[0] * np.asarray(cfg.season)[np.arange(cfg.horizon) % 7]
     b = cfg.lost_sales_cost[0]
-    is_tail = table.row_demand == table.row_on_hand
     pair_on_hand = space.on_hand_after_arrival()[table.pair_state]
-    terms = {float(lam): demand_terms(float(lam), C) for lam in np.unique(lam_t)}   # ≤ 7 distinct λ
+    daily = _daily_terms(cfg)
 
     def q_values(t: int, V_next: np.ndarray) -> np.ndarray:
-        pmf, tail, excess = terms[float(lam_t[t])]
-        w = np.where(is_tail, tail[table.row_on_hand], pmf[table.row_demand])
+        pmf, tail, excess = daily[t]
+        w = _row_weights(table, pmf, tail)
         value = np.bincount(table.row_pair, weights=w * (table.row_reward + V_next[table.row_next]),
                             minlength=len(table.pair_state)) - b * excess[pair_on_hand]
         grid = np.full((S, C + 1), -np.inf)
@@ -148,21 +151,19 @@ def daily_profile(cfg: EnvConfig, pi: np.ndarray, start: np.ndarray, table: Tabl
     sum(reward) equals the policy's value from that start; used to measure the cold-start effect (D4)."""
     table = table or build_table(cfg)
     space, S, C, T = table.space, len(table.space), cfg.capacity, cfg.horizon
-    lam_t = cfg.demand_mean[0] * np.asarray(cfg.season)[np.arange(T) % 7]
     b = cfg.lost_sales_cost[0]
     pair_of = np.full((S, C + 1), -1, np.int64)
     pair_of[table.pair_state, table.pair_order] = np.arange(len(table.pair_state))
-    is_tail = table.row_demand == table.row_on_hand
-    feasible = C - space.occupancy()
+    occ = space.occupancy()
+    feasible = C - occ
     on_hand = space.on_hand_after_arrival()
     mu = np.asarray(start, np.float64)
     reward, occupancy = np.zeros(T), np.zeros(T)
-    for t in range(T):
-        pmf, tail, excess = demand_terms(float(lam_t[t]), C)
+    for t, (pmf, tail, excess) in enumerate(_daily_terms(cfg)):
         chosen = np.zeros(len(table.pair_state))
         chosen[pair_of[np.arange(S), np.minimum(pi[t], feasible)]] = mu      # probability of each (state, order)
-        w = np.where(is_tail, tail[table.row_on_hand], pmf[table.row_demand]) * chosen[table.row_pair]
+        w = _row_weights(table, pmf, tail) * chosen[table.row_pair]
         reward[t] = w @ table.row_reward - b * (mu @ excess[on_hand])
-        occupancy[t] = mu @ space.occupancy()
+        occupancy[t] = mu @ occ
         mu = np.bincount(table.row_next, weights=w, minlength=S)
     return DailyProfile(reward, occupancy)

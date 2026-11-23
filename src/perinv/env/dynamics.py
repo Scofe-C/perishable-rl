@@ -15,6 +15,7 @@ Owner: Member 1. Contract: docs/SPEC.md §2, §3.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 
@@ -75,7 +76,8 @@ def clip_orders(q: np.ndarray, occ: np.ndarray, capacity: int) -> tuple[np.ndarr
     return q, clipped
 
 
-def _check(inv: np.ndarray, pipe: np.ndarray, q: np.ndarray, d: np.ndarray, cfg: EnvConfig) -> None:
+def _check(inv: np.ndarray, pipe: np.ndarray, q: np.ndarray, d: np.ndarray, cfg: EnvConfig) -> np.ndarray:
+    """Validate the inputs; returns the decision-time occupancy int[B]."""
     b, n, L, P = inv.shape[0], cfg.n_skus, cfg.shelf_life, cfg.lead_time
     for name, a, shape in (("inv", inv, (b, n, L)), ("pipe", pipe, (b, n, P)), ("q", q, (b, n)), ("d", d, (b, n))):
         if a.shape != shape:
@@ -87,17 +89,28 @@ def _check(inv: np.ndarray, pipe: np.ndarray, q: np.ndarray, d: np.ndarray, cfg:
     occ = inv.sum(axis=(1, 2)) + pipe.sum(axis=(1, 2))
     if (occ > cfg.capacity).any():
         raise ValueError(f"state occupancy {int(occ.max())} exceeds capacity {cfg.capacity}: not a reachable state")
+    return occ
+
+
+# breakdown key -> EnvConfig field of the per-unit price or cost
+_UNIT = {"revenue": "price", "ordering": "order_cost", "holding": "holding_cost", "expiry": "expiry_cost",
+         "lost_sales": "lost_sales_cost"}
+
+
+@lru_cache(maxsize=64)
+def _unit_values(cfg: EnvConfig) -> dict[str, np.ndarray]:
+    """float64[N] per breakdown key, built once per config (step is the env's hot path)."""
+    return {k: np.asarray(getattr(cfg, f), dtype=np.float64) for k, f in _UNIT.items()}
 
 
 def step(inv: np.ndarray, pipe: np.ndarray, q: np.ndarray, d: np.ndarray, cfg: EnvConfig) -> Transition:
     """One day for every row of the batch, in the SPEC §3 order. Inputs are not modified."""
     inv, pipe, q, d = (np.asarray(a) for a in (inv, pipe, q, d))
-    _check(inv, pipe, q, d, cfg)
+    occ = _check(inv, pipe, q, d, cfg)
     inv = inv.astype(np.int64, copy=True)
     pipe = pipe.astype(np.int64, copy=True)
 
     # 1. decide: clip to the remaining capacity
-    occ = inv.sum(axis=(1, 2)) + pipe.sum(axis=(1, 2))
     ordered, clipped = clip_orders(q, occ, cfg.capacity)
     # 2. arrive into the freshest bucket
     inv[:, :, -1] += pipe[:, :, 0]
@@ -119,12 +132,8 @@ def step(inv: np.ndarray, pipe: np.ndarray, q: np.ndarray, d: np.ndarray, cfg: E
     pipe[:, :, :-1] = pipe[:, :, 1:]
     pipe[:, :, -1] = ordered
     # 7. reward
-    def cost(name: str, qty: np.ndarray) -> np.ndarray:
-        return (np.asarray(getattr(cfg, name), dtype=np.float64) * qty).sum(axis=1)
-
-    breakdown = {"revenue": cost("price", sold), "ordering": cost("order_cost", ordered),
-                 "holding": cost("holding_cost", held), "expiry": cost("expiry_cost", expired),
-                 "lost_sales": cost("lost_sales_cost", lost)}
+    qty = {"revenue": sold, "ordering": ordered, "holding": held, "expiry": expired, "lost_sales": lost}
+    breakdown = {k: (unit * qty[k]).sum(axis=1) for k, unit in _unit_values(cfg).items()}
     reward = (breakdown["revenue"] - breakdown["ordering"] - breakdown["holding"] - breakdown["expiry"]
               - breakdown["lost_sales"])
     return Transition(inv=inv, pipe=pipe, ordered=ordered, sold=sold.astype(np.int64), lost=lost,

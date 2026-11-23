@@ -24,9 +24,12 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+from perinv.env.config import capacity_from_kappa
+
 C1_SCHEMA_VERSION = 1
 METHODS = {"m1": "drop_stockout_days", "m2": "hourly_extrapolation", "m3": "censored_mle"}
 SCALE_METHOD = "censored_mle"
+SCALE_SHORT = "m3"   # METHODS key of SCALE_METHOD
 MIN_STORES = 100
 RATE_RANGE = (0.3, 0.6)
 TARGET_LAMBDA = 4.0
@@ -76,10 +79,10 @@ def build_configs(params: dict[int, dict[str, dict]], ns=(1, 2, 5), kappas=(0.6,
         true_total = sum(scale * params[s][SCALE_METHOD]["lambda_base"] for s in skus)
         for kappa in kappas:
             if o_ref is not None:
-                capacity = max(1, round(kappa * o_ref[n]))
+                capacity = capacity_from_kappa(kappa, o_ref[n])
                 capacity_rule = f"round(kappa * O_ref), O_ref = {o_ref[n]} ({SCALE_METHOD} world)"
             else:
-                capacity = max(1, round(kappa * CAPACITY_PER_UNIT_DEMAND * true_total))
+                capacity = capacity_from_kappa(kappa, CAPACITY_PER_UNIT_DEMAND * true_total)
                 capacity_rule = f"round(kappa * {CAPACITY_PER_UNIT_DEMAND} * sum(lambda_env, {SCALE_METHOD}))"
             for short in methods:
                 rows = [params[s][METHODS[short]] for s in skus]

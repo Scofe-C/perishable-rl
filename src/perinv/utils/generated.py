@@ -14,12 +14,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from perinv.utils.atomic import atomic_path
-
-
-def _write(path: Path, text: str) -> None:
-    with atomic_path(path) as tmp:
-        tmp.write_text(text, encoding="utf-8", newline="\n")   # LF on every OS
+from perinv.utils.atomic import atomic_write_text
 
 
 def publish(files: dict[str, str], out_dir: str | Path, *, header: str, validate: Callable[[Path], object],
@@ -34,7 +29,7 @@ def publish(files: dict[str, str], out_dir: str | Path, *, header: str, validate
     with tempfile.TemporaryDirectory() as tmp:
         for name, body in files.items():
             p = Path(tmp) / name
-            _write(p, header + body)
+            atomic_write_text(p, header + body)
             try:
                 validate(p)
             except Exception as exc:
@@ -43,7 +38,7 @@ def publish(files: dict[str, str], out_dir: str | Path, *, header: str, validate
     out.mkdir(parents=True, exist_ok=True)
     written = []
     for name, body in files.items():
-        _write(out / name, header + body)
+        atomic_write_text(out / name, header + body)
         written.append(out / name)
     removed = []
     for p in sorted(out.glob("*.yaml")):

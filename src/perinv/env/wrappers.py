@@ -24,8 +24,8 @@ SPLIT_SCALE = 4.0
 
 def total_share(a0: float) -> float:
     """D1: rescaled sigmoid, exactly 0 at a0 = −1 and exactly 1 at a0 = +1 (a0 is clipped to [−1, 1])."""
-    a0 = float(np.clip(a0, -1.0, 1.0))
-    return float(np.clip((1.0 / (1.0 + np.exp(-SHARE_SCALE * a0)) - _LO) / (_HI - _LO), 0.0, 1.0))
+    a0 = min(max(float(a0), -1.0), 1.0)
+    return min(max(float((1.0 / (1.0 + np.exp(-SHARE_SCALE * a0)) - _LO) / (_HI - _LO)), 0.0), 1.0)
 
 
 def largest_remainder(weights: np.ndarray, total: int) -> np.ndarray:
@@ -46,7 +46,7 @@ def capacity_share_orders(action: np.ndarray, remaining: int) -> np.ndarray:
     if a.size < 2 or not np.isfinite(a).all():
         raise ValueError(f"CapacityShareAction needs N+1 finite numbers, got {action!r}")
     remaining = int(remaining)
-    total = int(np.clip(np.floor(total_share(a[0]) * remaining + 0.5), 0, remaining))
+    total = int(np.floor(total_share(a[0]) * remaining + 0.5))    # share in [0, 1], so total in [0, R]
     z = SPLIT_SCALE * np.clip(a[1:], -1.0, 1.0)
     w = np.exp(z - z.max())
     return largest_remainder(w / w.sum(), total)
@@ -64,10 +64,11 @@ class CapacityShareAction(gym.ActionWrapper):
 
     def __init__(self, env: gym.Env):
         super().__init__(env)
-        self.action_space = gym.spaces.Box(-1.0, 1.0, (_base(env).n + 1,), np.float32)
+        self._base = _base(env)
+        self.action_space = gym.spaces.Box(-1.0, 1.0, (self._base.n + 1,), np.float32)
 
     def action(self, action):
-        return capacity_share_orders(action, _base(self.env).remaining)
+        return capacity_share_orders(action, self._base.remaining)
 
 
 class DiscreteOrder(gym.ActionWrapper):

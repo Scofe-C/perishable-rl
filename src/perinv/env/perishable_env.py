@@ -28,9 +28,8 @@ class PerishableInventoryEnv(gym.Env):
         self.n, self.L, self.P, self.T, self.C = cfg.n_skus, cfg.shelf_life, cfg.lead_time, cfg.horizon, cfg.capacity
         self.action_space = gym.spaces.MultiDiscrete([self.C + 1] * self.n)     # D6
         self.observation_space = gym.spaces.Box(0.0, 1.0, (self.n * (self.L + self.P) + 7 + 2,), np.float32)
-        # Poisson means by day: lambda_i * season[t mod 7] (SPEC §3 step 3)
-        self._lam = (np.asarray(cfg.demand_mean, np.float64)[None, :]
-                     * np.asarray(cfg.season, np.float64)[np.arange(self.T) % 7, None])
+        self._lam = cfg.daily_lambda()
+        self._start = dynamics.initial_state(cfg)    # D4: warm start, pipeline pre-filled
         self.inv = np.zeros((self.n, self.L), np.int64)
         self.pipe = np.zeros((self.n, self.P), np.int64)
         self.t = 0
@@ -77,7 +76,7 @@ class PerishableInventoryEnv(gym.Env):
             if not np.issubdtype(path.dtype, np.integer) or (path < 0).any():
                 raise ValueError("demand_path must hold non-negative integers")
             self._demand = path.astype(np.int64, copy=True)
-        self.inv, self.pipe = dynamics.initial_state(self.cfg)    # D4: warm start, pipeline pre-filled
+        self.inv, self.pipe = (a.copy() for a in self._start)
         self.t = 0
         return self._obs(), {"state": self._state()}
 

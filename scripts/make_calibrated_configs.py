@@ -9,10 +9,11 @@ Output: configs/env/calibrated/frn_<m1|m3>_n<N>_k<kappa>.yaml (m1 = drop stockou
 
 import argparse
 import json
+from pathlib import Path
 
 import yaml
 
-from perinv.data.calibration import METHODS, SCALE_METHOD, build_configs, load_c1
+from perinv.data.calibration import SCALE_SHORT, build_configs, load_c1
 from perinv.env.config import load_env_config
 from perinv.utils.generated import publish
 
@@ -52,8 +53,8 @@ def main() -> None:
 
 def load_oref(path: str) -> tuple[dict[int, float], dict[str, str]]:
     """({N: O_ref of the m3 world}, {config name: demand_hash it was measured on}) from measure_oref.py --json."""
-    short = next(k for k, v in METHODS.items() if v == SCALE_METHOD)
-    entries = json.loads(open(path, encoding="utf-8").read())["configs"]
+    short = SCALE_SHORT
+    entries = json.loads(Path(path).read_text(encoding="utf-8"))["configs"]
     o_ref, hashes = {}, {}
     for name, e in entries.items():
         if name.startswith(f"frn_{short}_n"):

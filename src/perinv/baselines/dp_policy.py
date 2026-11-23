@@ -5,9 +5,9 @@
 
 Solutions are cached in results/dp/<config_hash>.npz and checked against the config hash,
 EVENT_ORDER_VERSION and backward_induction.DP_VERSION on load; an unreadable or mismatched file counts as a miss
-and is re-solved. Several jobs may
-build the DP for one config at once (e.g. shocks.yaml groups A_*): each writer uses its own temp file and then
-renames it, and the solve is deterministic, so the last writer wins with identical content.
+and is re-solved. Several jobs may build the DP for one config at once (e.g. shocks.yaml groups A_*):
+utils.atomic gives each writer its own temp file, and the solve is deterministic, so the last writer wins with
+identical content.
 Override the folder with PERINV_DP_CACHE.
 
 Owner: Member 1. Contract: docs/SPEC.md §8.
@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import os
 import time
-import uuid
 import zipfile
 from pathlib import Path
 
@@ -27,7 +26,7 @@ from perinv.dp import state_space
 from perinv.dp.backward_induction import DP_VERSION, Solution, solve
 from perinv.env.config import EnvConfig
 from perinv.env.dynamics import EVENT_ORDER_VERSION
-from perinv.utils.atomic import retry_on_permission_error
+from perinv.utils.atomic import atomic_path
 
 DEFAULT_CACHE = Path("results/dp")
 
@@ -41,17 +40,9 @@ def cache_path(cfg: EnvConfig, root: Path | None = None) -> Path:
 
 
 def save(sol: Solution, cfg: EnvConfig, path: Path) -> None:
-    """Write via a temp file unique to this writer (not utils.atomic's shared `<name>.tmp`: two jobs solving the
-    same config would otherwise write and rename one temp file), then rename over the final path."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
-    try:
-        with open(tmp, "wb") as fh:   # file handle: np.savez would append .npz to the temp name
-            np.savez_compressed(fh, V=sol.V, pi=sol.pi.astype(np.int16), config_hash=cfg.config_hash(),
-                                event_order_version=EVENT_ORDER_VERSION, dp_version=DP_VERSION)
-        retry_on_permission_error(lambda: os.replace(tmp, path))   # Windows: a reader may hold the target
-    finally:
-        tmp.unlink(missing_ok=True)
+    with atomic_path(path) as tmp, open(tmp, "wb") as fh:   # file handle: np.savez would append .npz to the name
+        np.savez_compressed(fh, V=sol.V, pi=sol.pi.astype(np.int16), config_hash=cfg.config_hash(),
+                            event_order_version=EVENT_ORDER_VERSION, dp_version=DP_VERSION)
 
 
 def _load(path: Path, cfg: EnvConfig, n_states: int) -> tuple[np.ndarray, np.ndarray] | None:
@@ -59,8 +50,10 @@ def _load(path: Path, cfg: EnvConfig, n_states: int) -> tuple[np.ndarray, np.nda
     try:
         with np.load(path) as z:
             if (str(z["config_hash"]) == cfg.config_hash() and str(z["event_order_version"]) == EVENT_ORDER_VERSION
-                    and str(z["dp_version"]) == DP_VERSION and z["V"].shape == (cfg.horizon + 1, n_states)):
-                return z["V"], z["pi"].astype(np.int64)
+                    and str(z["dp_version"]) == DP_VERSION):
+                V = z["V"]   # read once: each z[...] decompresses the member again
+                if V.shape == (cfg.horizon + 1, n_states):
+                    return V, z["pi"].astype(np.int64)
     except (OSError, ValueError, KeyError, EOFError, zipfile.BadZipFile):
         pass
     return None
@@ -69,9 +62,10 @@ def _load(path: Path, cfg: EnvConfig, n_states: int) -> tuple[np.ndarray, np.nda
 def load_or_solve(cfg: EnvConfig, root: Path | None = None) -> tuple[Solution, dict]:
     """(solution, meta). meta: cache path, whether it was a cache hit, solve seconds."""
     path = cache_path(cfg, root)
-    space = state_space.build(cfg.capacity, cfg.shelf_life, cfg.lead_time)
-    cached = _load(path, cfg, len(space)) if path.exists() else None
+    n_states = state_space.expected_count(cfg.capacity, cfg.shelf_life, cfg.lead_time)
+    cached = _load(path, cfg, n_states) if path.exists() else None
     if cached is not None:
+        space = state_space.build(cfg.capacity, cfg.shelf_life, cfg.lead_time)
         return Solution(space, *cached), {"cache": str(path), "hit": True}
     t0 = time.perf_counter()
     sol = solve(cfg)
