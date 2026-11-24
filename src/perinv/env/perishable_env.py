@@ -3,7 +3,7 @@
     env = PerishableInventoryEnv(cfg)                        # the runner's env factory: make_env(cfg)
     obs, info = env.reset(seed=k, options={"demand_path": demand[k]})   # evaluation: replay CRN path k
     obs, info = env.reset(seed=s)                           # training: Poisson demand from env.np_random (D5)
-    obs, r, terminated, truncated, info = env.step(q)       # q: int[N] orders; terminated is always False
+    obs, r, terminated, truncated, info = env.step(q)       # q: int[N] orders; terminated at t = T, never truncated
 
 The day itself is perinv.env.dynamics.step; this class only keeps the state, draws or replays demand and
 builds observations and the info dict. Wrappers for agents: perinv.env.wrappers.
@@ -101,4 +101,6 @@ class PerishableInventoryEnv(gym.Env):
             "reward_breakdown": {k: float(v[0]) for k, v in tr.breakdown.items()},
             "state": self._state(),
         }
-        return self._obs(), float(tr.reward[0]), False, self.t == self.T, info
+        # D8: day T is a true end (no salvage, V[T] = 0 in the DP), so `terminated`. `truncated` would make SB3
+        # bootstrap gamma * V(final state) and value stock that can never be sold.
+        return self._obs(), float(tr.reward[0]), self.t == self.T, False, info

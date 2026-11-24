@@ -1,5 +1,6 @@
 """Runner: matrix expansion, skip-if-done, failure isolation, model reuse, parallel and kill/resume."""
 
+import dataclasses
 import json
 import os
 import subprocess
@@ -97,9 +98,9 @@ def test_missing_crn_paths_fail_early(ws):
 
 def test_unimplemented_builder_is_blocked_not_run(ws):
     m = write_matrix(ws, {"A": {"envs": envs(ws, "n1_k06"), "policies": [{"name": "sac", "seeds": [0]}]}},
-                     builders={"sac": "perinv.train.train:build"})
+                     builders={"sac": "perinv.train.not_written_yet:build"})
     (row,) = plan(jobs_for(ws, m))
-    assert row[2].startswith("no builder") and "perinv.train.train:build" in row[2]
+    assert row[2].startswith("no builder") and "perinv.train.not_written_yet:build" in row[2]
     assert run_matrix(jobs_for(ws, m)) == {"skipped": 1}
 
 
@@ -130,11 +131,32 @@ def test_new_test_paths_reevaluate_without_retraining(ws):
     m = write_matrix(ws, {"A": {"envs": envs(ws, "n1_k06"), "policies": ["ppo"], "seeds": [0]}})
     (job,) = jobs_for(ws, m)
     run_matrix([job])
-    write_paths(job.cfg, ws / "crn", root_seed=99, sizes={"tune": 2, "test": 4})  # test.npz changes -> run_key
+    # same seed and tune size: tune.npz is bit-identical, only test.npz changes -> run_key, not train_key
+    write_paths(job.cfg, ws / "crn", root_seed=1, sizes={"tune": 2, "test": 5})
     (job,) = jobs_for(ws, m)
     assert run_status(job.run_dir, job.keys()[1]) == "stale"
     assert run_matrix([job])["done"] == 1
     assert (job.run_dir / "builds.txt").read_text().split() == ["train", f"reuse:{job.name}"]
+
+
+def test_new_tune_paths_retrain(ws):
+    """Tuning and (s,S) grid search read the tune paths, so new tune paths change the train_key."""
+    m = write_matrix(ws, {"A": {"envs": envs(ws, "n1_k06"), "policies": ["ppo"], "seeds": [0]}})
+    (job,) = jobs_for(ws, m)
+    tk_before = job.keys()[0]
+    run_matrix([job])
+    write_paths(job.cfg, ws / "crn", root_seed=1, sizes={"tune": 3, "test": 4})   # test.npz identical
+    (job,) = jobs_for(ws, m)
+    assert job.keys()[0] != tk_before
+    assert run_matrix([job])["done"] == 1
+    assert (job.run_dir / "builds.txt").read_text().split() == ["train", "train"]
+
+
+def test_builder_is_part_of_the_run_identity(ws):
+    m = write_matrix(ws, {"A": {"envs": envs(ws, "n1_k06"), "policies": ["ppo"], "seeds": [0]}})
+    (job,) = jobs_for(ws, m)
+    other = dataclasses.replace(job, builder=job.builder + "_v2")
+    assert other.keys()[0] != job.keys()[0] and other.keys()[1] != job.keys()[1]
 
 
 def test_parallel_workers(ws):

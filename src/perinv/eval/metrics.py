@@ -46,14 +46,18 @@ def summary(con: duckdb.DuckDBPyConnection, metrics: list[str] = METRICS, seed: 
 def paired_vs(con: duckdb.DuckDBPyConnection, policy: str, baseline: str, seed: int = 0) -> pd.DataFrame:
     """For every run of `policy`: mean per-path profit difference to `baseline` on the same config and paths.
 
-    Baselines run with one seed; if several exist, their per-path profits are averaged first.
+    Baselines run with one seed; if several exist, their per-path profits are averaged first. The baseline is
+    its native run in that world (never a cross-evaluation), scored on the same CRN test file.
     """
     pairs = con.execute("""
-        WITH p AS (SELECT v.*, d.eval_config_hash, d.policy, d.seed, d."group", d.n_skus, d.kappa
+        WITH p AS (SELECT v.*, d.eval_config_hash, d.crn_test_sha256, d.cross_eval, d.policy, d.seed, d."group",
+                          d.n_skus, d.kappa
                    FROM v_path v JOIN dim_run d USING (run_key)),
-        b AS (SELECT eval_config_hash, path_id, AVG(profit) AS base FROM p WHERE policy = ? GROUP BY ALL)
+        -- the baseline evaluated natively in that world: a cross-evaluated baseline was built for another world
+        b AS (SELECT eval_config_hash, crn_test_sha256, path_id, AVG(profit) AS base FROM p
+              WHERE policy = ? AND NOT cross_eval GROUP BY ALL)
         SELECT p."group", p.n_skus, p.kappa, p.seed, p.path_id, p.profit, b.base
-        FROM p JOIN b USING (eval_config_hash, path_id)
+        FROM p JOIN b USING (eval_config_hash, crn_test_sha256, path_id)
         WHERE p.policy = ?
         ORDER BY ALL
     """, [baseline, policy]).df()
@@ -73,10 +77,11 @@ def paired_groups(con: duckdb.DuckDBPyConnection, group: str, reference: str, se
     method-3 world, against the same policy built on method-3 demand. Negative = calibration cost.
     """
     pairs = con.execute("""
-        WITH p AS (SELECT v.path_id, v.profit, d."group", d.policy, d.seed, d.n_skus, d.kappa, d.eval_config_hash
+        WITH p AS (SELECT v.path_id, v.profit, d."group", d.policy, d.seed, d.n_skus, d.kappa, d.eval_config_hash,
+                          d.crn_test_sha256
                    FROM v_path v JOIN dim_run d USING (run_key))
         SELECT a.policy, a.seed, a.n_skus, a.kappa, a.path_id, a.profit AS profit, b.profit AS ref_profit
-        FROM p a JOIN p b USING (policy, seed, eval_config_hash, path_id)
+        FROM p a JOIN p b USING (policy, seed, eval_config_hash, crn_test_sha256, path_id)
         WHERE a."group" = ? AND b."group" = ?
         ORDER BY ALL
     """, [group, reference]).df()

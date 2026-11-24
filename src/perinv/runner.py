@@ -107,7 +107,8 @@ class Job:
 
     def keys(self) -> tuple[str, str]:
         tk = train_key(self.cfg, policy=self.policy, hparams=self.hparams, seed=self.seed,
-                       train_env_steps=self.train_env_steps)
+                       train_env_steps=self.train_env_steps, builder=self.builder, env_factory=self.env_factory,
+                       crn_tune_sha256=crn_sha256(self.cfg, self.crn_root, "tune"))
         ev = self.eval_cfg
         return tk, run_key(tk, demand_hash=ev.demand_hash(), crn_test_sha256=crn_test_sha256(ev, self.crn_root),
                            eval_config_hash=ev.config_hash())
@@ -139,13 +140,17 @@ def check_cross_eval(build: EnvConfig, evaluate_on: EnvConfig) -> None:
                              f"the base demand of its build config, but {moved} differ")
 
 
-def crn_test_sha256(cfg: EnvConfig, crn_root: str | Path) -> str:
-    """sha256 of test.npz from the CRN manifest; fails early if the paths were never generated."""
+def crn_sha256(cfg: EnvConfig, crn_root: str | Path, split: str) -> str:
+    """sha256 of <split>.npz from the CRN manifest; fails early if the paths were never generated."""
     manifest = Path(crn_root) / cfg.demand_hash() / "manifest.json"
     if not manifest.exists():
         raise FileNotFoundError(f"no CRN paths for {cfg.name} at {manifest.parent}; "
                                 f"run: python scripts/make_crn_paths.py <env yaml>")
-    return json.loads(manifest.read_text())["files"]["test"]["sha256"]
+    return json.loads(manifest.read_text())["files"][split]["sha256"]
+
+
+def crn_test_sha256(cfg: EnvConfig, crn_root: str | Path) -> str:
+    return crn_sha256(cfg, crn_root, "test")
 
 
 def load_hparams(policy: str, env_path: str, configs_root: Path) -> tuple[dict, str]:
@@ -233,6 +238,7 @@ class BuildContext:
     make_env: Callable[[EnvConfig], object]
     reuse_model: bool
     model_dir: Path   # where to load a reusable model from (this run, or the native run with the same train_key)
+    crn_root: str = "data/crn"   # tune paths for (s,S) grid search and learning curves; never read the test split
 
 
 def run_job(job: Job, official: bool = False) -> dict:
@@ -260,7 +266,8 @@ def run_job(job: Job, official: bool = False) -> dict:
             run.log("reuse_model", from_run=trained_in.name)
         policy: Policy = resolve(job.builder)(BuildContext(
             cfg=cfg, policy=job.policy, hparams=job.hparams, seed=job.seed, train_env_steps=job.train_env_steps,
-            run=run, make_env=make_env, reuse_model=trained_in is not None, model_dir=trained_in or run.dir))
+            run=run, make_env=make_env, reuse_model=trained_in is not None, model_dir=trained_in or run.dir,
+            crn_root=job.crn_root))
         run.stage = "eval"
         run.log("stage_start")
         demand = load_paths(ecfg, "test", job.crn_root)   # demand paths of the eval world

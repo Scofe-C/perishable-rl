@@ -68,10 +68,10 @@ JOIN u USING (run_key);
 -- The reference is the DP evaluated natively in that world (not a cross-evaluated DP).
 CREATE OR REPLACE VIEW v_vs_dp AS
 WITH p AS (
-    SELECT v.run_key, v.path_id, v.profit, d.eval_config_hash, d.policy, d.cross_eval
+    SELECT v.run_key, v.path_id, v.profit, d.eval_config_hash, d.crn_test_sha256, d.policy, d.cross_eval
     FROM v_path v JOIN dim_run d USING (run_key)
 ),
-dp AS (SELECT eval_config_hash, path_id, AVG(profit) AS dp_profit FROM p
+dp AS (SELECT eval_config_hash, crn_test_sha256, path_id, AVG(profit) AS dp_profit FROM p
         WHERE policy = 'dp' AND NOT cross_eval GROUP BY ALL)
 SELECT
     p.run_key,
@@ -79,5 +79,5 @@ SELECT
     CASE WHEN AVG(dp.dp_profit) > 0 THEN AVG(p.profit) / AVG(dp.dp_profit) END AS pct_of_dp,
     AVG(p.profit - dp.dp_profit)                   AS mean_gap_to_dp,
     COUNT(*)                                       AS n_paired_paths
-FROM p JOIN dp USING (eval_config_hash, path_id)
+FROM p JOIN dp USING (eval_config_hash, crn_test_sha256, path_id)   -- same world, same path set, same path
 GROUP BY p.run_key;

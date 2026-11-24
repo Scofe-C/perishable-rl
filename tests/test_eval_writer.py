@@ -110,5 +110,5 @@ def test_evaluate_rejects_early_termination(setup):
             obs, r, term, trunc, info = super().step(action)
             return obs, r, self.t == 3, trunc, info
 
-    with pytest.raises(RuntimeError, match="truncates exactly at t=T"):
+    with pytest.raises(RuntimeError, match="ends the episode exactly at t=T"):
         evaluate(ConstantPolicy([1, 1]), StopsEarly(cfg), demand)

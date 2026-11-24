@@ -1,0 +1,20 @@
+algo: a2c
+env: configs/env/n2_k06.yaml
+hparams:
+  n_envs: 4
+  n_steps: 5
+  learning_rate: 2.2651839469255296e-05
+  gamma: 0.95
+  gae_lambda: 0.9
+  ent_coef: 0.004597147846416138
+  net_arch:
+  - 64
+  - 64
+x-tuning:
+  tune_profit: 918.584
+  default_tune_profit: 918.1399999999999
+  n_trials: 10
+  train_env_steps: 500000
+  seed: 0
+  scored_on: tune CRN paths
+  best_trial: 3

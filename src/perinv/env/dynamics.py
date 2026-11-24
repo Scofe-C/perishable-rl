@@ -22,7 +22,8 @@ from perinv.env.config import EnvConfig
 
 # Bump whenever SPEC §3 changes: it is part of every train_key (perinv.utils.run_io).
 # "2": warm start (D4), the pipeline starts pre-filled instead of empty.
-EVENT_ORDER_VERSION = "2"
+# "3": the episode ends with terminated=True at t = T, not truncated (D8); changes every RL target.
+EVENT_ORDER_VERSION = "3"
 
 
 def initial_state(cfg: EnvConfig) -> tuple[np.ndarray, np.ndarray]:

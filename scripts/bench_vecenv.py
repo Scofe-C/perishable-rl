@@ -38,8 +38,8 @@ def raw_steps_per_second(path: str, steps: int) -> float:
     actions = rng.uniform(-1, 1, (steps, env.action_space.shape[0])).astype(np.float32)
     t0 = time.perf_counter()
     for a in actions:
-        _, _, _, truncated, _ = env.step(a)
-        if truncated:
+        _, _, terminated, truncated, _ = env.step(a)
+        if terminated or truncated:
             env.reset()
     return steps / (time.perf_counter() - t0)
 

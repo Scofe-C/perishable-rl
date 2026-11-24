@@ -26,6 +26,9 @@ from perinv.dp.state_space import StateSpace
 from perinv.env import dynamics
 from perinv.env.config import EnvConfig
 
+# Bump whenever this module's math changes: cached solutions (baselines.dp_policy) are checked against it.
+DP_VERSION = "1"
+
 
 @dataclass(frozen=True)
 class Table:

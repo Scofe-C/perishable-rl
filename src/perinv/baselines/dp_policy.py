@@ -3,8 +3,9 @@
     policy = dp_policy.build(ctx)    # runner builder (WAREHOUSE §7); solves ctx.cfg, never the eval world
     sol = dp_policy.load_or_solve(cfg)
 
-Solutions are cached in results/dp/<config_hash>.npz and checked against the config hash and
-EVENT_ORDER_VERSION on load; an unreadable or mismatched file counts as a miss and is re-solved. Several jobs may
+Solutions are cached in results/dp/<config_hash>.npz and checked against the config hash,
+EVENT_ORDER_VERSION and backward_induction.DP_VERSION on load; an unreadable or mismatched file counts as a miss
+and is re-solved. Several jobs may
 build the DP for one config at once (e.g. shocks.yaml groups A_*): each writer uses its own temp file and then
 renames it, and the solve is deterministic, so the last writer wins with identical content.
 Override the folder with PERINV_DP_CACHE.
@@ -23,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from perinv.dp import state_space
-from perinv.dp.backward_induction import Solution, solve
+from perinv.dp.backward_induction import DP_VERSION, Solution, solve
 from perinv.env.config import EnvConfig
 from perinv.env.dynamics import EVENT_ORDER_VERSION
 from perinv.utils.atomic import retry_on_permission_error
@@ -47,7 +48,7 @@ def save(sol: Solution, cfg: EnvConfig, path: Path) -> None:
     try:
         with open(tmp, "wb") as fh:   # file handle: np.savez would append .npz to the temp name
             np.savez_compressed(fh, V=sol.V, pi=sol.pi.astype(np.int16), config_hash=cfg.config_hash(),
-                                event_order_version=EVENT_ORDER_VERSION)
+                                event_order_version=EVENT_ORDER_VERSION, dp_version=DP_VERSION)
         retry_on_permission_error(lambda: os.replace(tmp, path))   # Windows: a reader may hold the target
     finally:
         tmp.unlink(missing_ok=True)
@@ -58,7 +59,7 @@ def _load(path: Path, cfg: EnvConfig, n_states: int) -> tuple[np.ndarray, np.nda
     try:
         with np.load(path) as z:
             if (str(z["config_hash"]) == cfg.config_hash() and str(z["event_order_version"]) == EVENT_ORDER_VERSION
-                    and z["V"].shape == (cfg.horizon + 1, n_states)):
+                    and str(z["dp_version"]) == DP_VERSION and z["V"].shape == (cfg.horizon + 1, n_states)):
                 return z["V"], z["pi"].astype(np.int64)
     except (OSError, ValueError, KeyError, EOFError, zipfile.BadZipFile):
         pass

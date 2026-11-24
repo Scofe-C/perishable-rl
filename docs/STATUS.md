@@ -3,28 +3,26 @@
 > Keep this current. Whoever finishes a step updates "Current step" and adds one line to "History".
 > Agents: read this first, then [SPEC.md](SPEC.md). Project summary: [README.md](../README.md).
 
-**Last updated:** 2026-11-22 · **Phase:** Week 1. The M3 pipeline is done. The M1 env and DP start now on
-branch `zhengxin-m1-env` (Zhengxin covers M1 as well as M3).
+**Last updated:** 2026-11-23 · **Phase:** Week 2. **Deadline: everything due Dec 6.** All code for the core
+experiments exists; tuning is done (configs/tuned/, 22 files).
 
 ## Current step
-**M1 is done (U1–U5):** env, wrappers and exact DP built; O_ref capacities and the D4 warm start applied; CRN paths
-committed. Next: the thinnest end-to-end run once M2's `train.build` exists.
+**Final runs** (`core.yaml --official`), then the analysis. Tuning finished on 2026-11-23 (History). M2 code, the review fixes and the
+smoke run landed on 2026-11-23 (History).
 
-Blockers:
-1. **SPEC.md is a draft.** D1–D7 (DECISIONS.md) are written in and need the other two members' confirmation.
-2. **No training or (s,S)/newsvendor builders yet**: RL and heuristic jobs show `blocked (no builder yet)`.
-   DP jobs (groups A, DP1/DP3/DP13) can run now.
-3. **Repo admin:** the CODEOWNERS handles are placeholders, and CI has not run on Python 3.15.
+Run order (each command skips what is already done):
+1. [done] `python -m perinv.train.tune --algos sac,ppo,a2c,maskppo,dqn --envs configs/env/n{1,2,5}_k{06,10}.yaml --jobs 8`
+   → `configs/tuned/<algo>-<env>.yaml` + `results/tune/*.csv`. Commit the tuned files.
+2. Tag the frozen env: `git tag v0.1-frozen-env` (env, SPEC, budget, tuned hparams). Any later env change = rerun.
+3. `python scripts/run_matrix.py configs/experiments/core.yaml --jobs 8 --official` (clean tree required).
+4. `python scripts/analyze.py` → `results/` tables and figures for the report.
+5. Optional, only if time remains: `calibrated.yaml` (group D), `shocks.yaml`.
 
-Next, by owner (README has the owner table):
-- **M1:** see the checklist below.
-- **M2:** `agents/factory.py`, `agents/sb3_policy.py` (it must return order quantities; DECISIONS 2026-11-22),
-  `train/train.py` + `callbacks.py`, and the (s,S) and newsvendor baselines, all as `build(ctx) -> Policy`
-  (WAREHOUSE §7).
-- **M3:** training on demand shocks
-  (unit D) once M2's `train.build` exists.
-- **All, by Friday:** `scripts/smoke_e2e.py` (N=1 → PPO 10k steps → 5 paths → plot); rerun `bench_vecenv.py` on
-  Linux, then set `train_env_steps` in `configs/budget.yaml`.
+Open team decisions (DECISIONS.md "team to confirm"): D1–D8, the 500k budget, the N=5 capacity 80/48, the M2
+choices (shared 64×64 net, SAC train_freq = 1), and whether to run the optional groups at all.
+
+Repo admin: CODEOWNERS handles are placeholders; fork PRs run no CI (add teammates as collaborators instead).
+CI does run on Python 3.15 for pushes (green).
 
 ## M1 checklist
 Must have:
@@ -48,9 +46,9 @@ Done by decision: the mapping endpoints (D1) and the clipping rule (D2).
 | Status | What |
 |---|---|
 | Working + tested | `env/` (config, dynamics, env, wrappers), `dp/` + `baselines/dp_policy.py` (exact DP, cached), `data/` (CRN, calibration, scenarios), `eval/` (evaluate, writer, warehouse, metrics, stats), `runner.py`, `utils/`, `baselines/base.py`; scripts `make_crn_paths`, `solve_dp`, `measure_oref` (provisional), `bench_vecenv`, `make_calibrated_configs`, `make_shock_configs`, `run_matrix`, `analyze`; infra data platform (`infra/`) |
-| Stub (docstring only) | `baselines/{s_S,newsvendor}.py`, `agents/`, `train/`; script `smoke_e2e` |
-| Provisional values | capacities (O_ref from the order-up-to stand-in), cost parameters (SPEC §1) |
-| Tests | 183 passed, 2 skipped (M2's pending pitfall guards), plus 2 slow tests (`pytest -m slow`) |
+| Stub (docstring only) | none for the core experiments |
+| Provisional values | cost parameters (SPEC §1); capacities confirmed with the real (s,S) on 2026-11-23 |
+| Tests | 193 passed, plus 2 slow tests (`pytest -m slow`) |
 
 Platform notes:
 - Final experiments run on Linux or WSL2. Development also works on native Windows (docs/infra/RUN.md).
@@ -58,6 +56,18 @@ Platform notes:
 - SubprocVecEnv and the runner use spawn: always run real script files with an `if __name__ == "__main__":` guard.
 
 ## History
+- 2026-11-23 (Weibo): **Tuning done** at 500k steps, 10 trials, 22 algorithm × cell pairs, 8 jobs, 2 h 40 m on an M5
+  Mac; no failures. Best tune-path profit (SAC / PPO / A2C): n1_k06 506.2 / 505.7 / 480.4, n1_k10 667.0 / 662.8 /
+  624.5, n2_k06 972.1 / 964.4 / 918.6, n2_k10 1340.6 / 1319.8 / 1246.3, n5_k06 2472.6 / 2446.4 / 2328.6, n5_k10
+  3322.8 / 3258.0 / 3042.1; MaskablePPO 506.3 / 660.8, DQN 506.4 / 662.6 (N=1). Defaults stayed best for A2C in 4
+  of 6 cells. A2C's best and PPO's default on n5_k06 are both exactly 2328.626 (likely the same fill-capacity
+  policy); check in the analysis. Per-trial tables in results/tune/ (gitignored).
+- 2026-11-23 (Weibo): **M2 implemented**: `agents/factory.py`, `agents/sb3_policy.py`, `train/{train,callbacks,tune}.py`,
+  `baselines/{s_S,newsvendor}.py`, `scripts/smoke_e2e.py`; algo defaults and Optuna spaces filled; M2 guard tests
+  real (`tests/test_agents_baselines.py`). **Review fixes**: D8 terminated at T; paired_vs native-only baseline;
+  pairing on crn_test_sha256; builder/env factory/tune sha in train_key; DP_VERSION. Smoke run: PPO 10k steps =
+  94.3 % of DP on n1_k06. Core matrix at the tiny profile: 36/36 done. N=5 capacity 80/48. Budget 500k. Tests:
+  193 fast + 2 slow pass.
 - 2026-11-22 (M3): Text writers emit LF on every OS (CRN manifest, run files, log lines). Performance and compute projection (EXPERIMENTS.md "Compute budget"): training dominates, and SAC with SB3 defaults is about 90 % of all CPU time (0.11k steps/s versus 2.8k for PPO); parallel jobs scale ×8.5 at 16. Env, eval, warehouse and runner overheads are small; no optimization applied yet.
 - 2026-11-22 (M1): U5 applied the U4 decisions. D4 warm start (`dynamics.initial_state`, `EVENT_ORDER_VERSION = "2"`; env, DP and test double share it). O_ref remeasured with the warm start and saved to `configs/env/oref_provisional.json`; core capacities 10/16, 19/32, 47/79; calibrated configs regenerated with `--oref` (m3 world, a demand_hash guard rejects stale measurements): 8/13, 16/27, 22/36. Shock configs regenerated. CRN paths committed (`data/crn`, 19 sets, unaffected by capacity). DP V0 now: n1_k06 505.7, n1_k10 661.3, frn m1/m3 N=1 κ0.6 236.5/302.7.
 - 2026-11-22 (M1): U4 measurements. O_ref with a provisional order-up-to stand-in (O_ref = 15 per SKU at λ = 4); `daily_profile` (exact daily expectations from the DP) shows the empty start costs ≈ 15–18 % of V0 and that a pre-filled pipeline removes it; `bench_vecenv.py`: training is model-bound (PPO ≈ 2.9k steps/s, DummyVecEnv×4). Capacities, warm start and VecEnv are proposed, not applied. CRN paths for all configs generated locally (data/crn, 315 KB, not committed yet).

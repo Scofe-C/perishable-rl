@@ -128,8 +128,8 @@ def evaluate(policy: Policy, env, demand: np.ndarray, path_ids: Sequence[int] | 
             day_reward[row, t] = float(reward)
             clipped[row, t] = bool(info.get("clipped", False))
             last = t == horizon - 1
-            if terminated or truncated != last:
+            if bool(terminated or truncated) != last:
                 raise RuntimeError(f"path {k}: episode ended at t={t} (terminated={terminated}, "
-                                   f"truncated={truncated}); SPEC §3 truncates exactly at t=T")
+                                   f"truncated={truncated}); SPEC §3 ends the episode exactly at t=T")
 
     return EvalResult(path_ids=ids, qty=qty, day_reward=day_reward, clipped=clipped)

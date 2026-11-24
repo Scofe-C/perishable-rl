@@ -102,3 +102,29 @@ def test_calibrated_matrix_has_cross_eval_group():
     jobs = expand("configs/experiments/calibrated.yaml", crn_root="data/crn")
     cross = [j for j in jobs if j.eval_env_path]
     assert cross and all("frn_m1_" in j.env_path and "frn_m3_" in j.eval_env_path for j in cross)
+
+
+def test_paired_vs_uses_only_the_native_baseline(ws, monkeypatch):
+    """Review bug: a cross-evaluated baseline (LH dp, built for `low`) was averaged into the `high` reference."""
+    monkeypatch.chdir(ws)
+    run_matrix(jobs_for(ws, matrix(ws, groups(ws))))
+    con = warehouse.connect(ws / "runs")
+    diff = metrics.paired_vs(con, "ppo", "dp").set_index(["group", "seed"])["mean_diff"]
+    # fakes:build_belief gives ppo and dp the same policy, so a native comparison is exactly 0
+    assert diff.loc[("H", 0)] == pytest.approx(0.0) and diff.loc[("L", 0)] == pytest.approx(0.0)
+
+
+def test_pairing_ignores_runs_scored_on_other_test_paths(ws, monkeypatch):
+    """Review bug: after regenerating the test paths and rerunning only ppo, path k of ppo was paired with a
+    different demand path k of the stale dp run. Now such runs do not pair at all."""
+    monkeypatch.chdir(ws)
+    m = matrix(ws, groups(ws, {"L": GROUPS["L"]}))
+    run_matrix(jobs_for(ws, m))
+    write_paths(load_env_config(env(ws, "low")), ws / "crn", root_seed=7, sizes={"tune": 2, "test": 6})
+    run_matrix([j for j in jobs_for(ws, m) if j.policy == "ppo"])
+    con = warehouse.connect(ws / "runs")
+    assert metrics.run_table(con).query("policy == 'ppo'")["pct_of_dp"].isna().all()
+    assert metrics.paired_vs(con, "ppo", "dp").empty
+    run_matrix([j for j in jobs_for(ws, m) if j.policy == "dp"])   # rerun dp on the new paths: pairs again
+    con = warehouse.connect(ws / "runs")
+    assert metrics.run_table(con).query("policy == 'ppo'")["pct_of_dp"].tolist() == pytest.approx([1.0, 1.0])

@@ -112,7 +112,7 @@ The reader refuses files whose schema version or `run_key` disagrees with the ma
 ## 7. Builder contract (M1 DP, M2 training and baselines)
 The runner calls `build(ctx) -> Policy` at `perinv.runner.DEFAULT_BUILDERS`: `perinv.train.train:build` (RL)
 and `perinv.baselines.{dp_policy,s_S,newsvendor}:build`. `ctx` carries `cfg, policy, hparams, seed,
-train_env_steps, run, make_env, reuse_model, model_dir`. Build from `ctx.cfg` only, never from the eval world.
+train_env_steps, run, make_env, reuse_model, model_dir, crn_root`. Build from `ctx.cfg` only, never from the eval world.
 
 An RL builder:
 1. If `ctx.reuse_model` is true, it loads `model.zip` / `vecnormalize.pkl` from `ctx.model_dir`, which may be another run's folder.

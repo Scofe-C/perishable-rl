@@ -59,7 +59,7 @@ def test_episode_shape_and_info():
     for t in range(CFG3.horizon):
         obs, r, terminated, truncated, info = env.step(np.array([1, 2, 3]))
         assert env.observation_space.contains(obs) and set(info) == SPEC6_KEYS
-        assert terminated is False and truncated is (t == CFG3.horizon - 1)
+        assert truncated is False and terminated is (t == CFG3.horizon - 1)   # D8
         b = info["reward_breakdown"]
         assert r == pytest.approx(b["revenue"] - b["ordering"] - b["holding"] - b["expiry"] - b["lost_sales"])
     with pytest.raises(RuntimeError, match="reset"):

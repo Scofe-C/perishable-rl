@@ -1,0 +1,23 @@
+algo: sac
+env: configs/env/n5_k10.yaml
+hparams:
+  n_envs: 1
+  learning_rate: 0.000248463381689824
+  buffer_size: 200000
+  learning_starts: 1000
+  batch_size: 256
+  tau: 0.02
+  gamma: 0.995
+  train_freq: 1
+  gradient_steps: 1
+  net_arch:
+  - 64
+  - 64
+x-tuning:
+  tune_profit: 3322.778
+  default_tune_profit: 3301.49
+  n_trials: 10
+  train_env_steps: 500000
+  seed: 0
+  scored_on: tune CRN paths
+  best_trial: 4

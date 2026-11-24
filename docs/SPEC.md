@@ -55,7 +55,8 @@ P=2: 10,626).
 5. **Hold.** `held = sum(inv)` after expiry.
 6. **Pipeline.** Shift `pipe[:, k] ← pipe[:, k+1]`, set `pipe[:, P−1] ← q`.
 7. **Reward.** `r = Σ_i [p·sold − c·q − h·held − w·expired − b·lost]`.
-8. `t ← t+1`. At `t = T` the episode is **truncated** (`truncated=True`); it is never terminated. No salvage value.
+8. `t ← t+1`. At `t = T` the episode is **terminated** (`terminated=True`, D8); it is never truncated. No salvage
+   value, so the value after day T is 0 for every method. (`truncated` would make SB3 bootstrap γ·V(final state).)
 
 - **Initial state (D4, warm start):** `inv = 0`, `pipe[i, k] = floor(λ_i · season[k] + 0.5)` (slot k arrives on
   day k). If that exceeds C, units are removed with the clipping rule over the flattened pipe (ties: lowest SKU,

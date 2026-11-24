@@ -55,10 +55,16 @@ def event_order_version() -> str:
     return str(getattr(env_pkg, "EVENT_ORDER_VERSION", "unversioned"))
 
 
-def train_key(cfg: EnvConfig, *, policy: str, hparams: dict, seed: int, train_env_steps: int | None) -> str:
-    """Everything that changes the trained model, and nothing else (no git SHA, host or time)."""
+def train_key(cfg: EnvConfig, *, policy: str, hparams: dict, seed: int, train_env_steps: int | None,
+              builder: str = "", env_factory: str = "", crn_tune_sha256: str = "") -> str:
+    """Everything that changes the trained model, and nothing else (no git SHA, host or time).
+
+    builder / env_factory: swapping the code that builds the policy must not leave old runs "done".
+    crn_tune_sha256: tuning and (s,S) grid search read the tune paths, so regenerating them retrains.
+    """
     return stable_hash({"config_hash": cfg.config_hash(), "policy": policy, "hparams": hparams, "seed": seed,
-                        "train_env_steps": train_env_steps, "event_order_version": event_order_version()})
+                        "train_env_steps": train_env_steps, "event_order_version": event_order_version(),
+                        "builder": builder, "env_factory": env_factory, "crn_tune_sha256": crn_tune_sha256})
 
 
 def run_key(train_key: str, *, demand_hash: str, crn_test_sha256: str, eval_config_hash: str | None = None) -> str:

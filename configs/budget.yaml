@@ -1,6 +1,7 @@
-# Fairness budgets (docs/EXPERIMENTS.md). Set train_env_steps after timing one run in week 1.
-train_env_steps: null
-eval_every_env_steps: null
+# Fairness budgets (docs/EXPERIMENTS.md). train_env_steps from the 2026-11-23 convergence probe (DECISIONS):
+# PPO on n1_k10 still improves to 500k; SAC, DQN, A2C and PPO on N=5 level off by 60k-300k.
+train_env_steps: 500000
+eval_every_env_steps: null   # learning curve: 20 points per run (perinv.train.train.CURVE_POINTS)
 n_tune_trials: 10
 seeds: [0, 1, 2, 3, 4]
 crn_root_seed: 2026

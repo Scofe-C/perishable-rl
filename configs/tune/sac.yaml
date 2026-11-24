@@ -1,2 +1,7 @@
-# Optuna search space for sac: param -> {type: float|int|categorical, low, high, log, choices}
-{}
+# Optuna search space for sac (adapted from RL Zoo). train_freq is NOT tuned: it sets SAC's compute cost,
+# which is a team decision (DECISIONS.md). Values not listed keep configs/algo/sac.yaml.
+learning_rate: {type: float, low: 1.0e-5, high: 1.0e-3, log: true}
+batch_size: {type: categorical, choices: [64, 128, 256]}
+gamma: {type: categorical, choices: [0.95, 0.98, 0.99, 0.995]}
+tau: {type: categorical, choices: [0.005, 0.01, 0.02]}
+learning_starts: {type: categorical, choices: [500, 1000, 5000]}

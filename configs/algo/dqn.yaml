@@ -1,4 +1,15 @@
-# Default hyperparameters for dqn (before tuning). Fill from RL Zoo / Harsha et al.
+# Defaults before tuning (SB3 DQN defaults except buffer/learning_starts sized for short runs). N = 1 only.
 algo: dqn
 policy: MlpPolicy
-hparams: {}
+hparams:
+  n_envs: 1
+  learning_rate: 0.0001
+  buffer_size: 100000
+  learning_starts: 1000
+  batch_size: 64
+  gamma: 0.99
+  train_freq: 4
+  target_update_interval: 1000
+  exploration_fraction: 0.2
+  exploration_final_eps: 0.05
+  net_arch: [64, 64]

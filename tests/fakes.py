@@ -69,7 +69,7 @@ class FakeEnv:
         self.t += 1
         info = {"sold": sold, "demand": d, "lost": lost, "expired": expired, "ordered": q, "held": held,
                 "occupancy": occ, "clipped": clipped, "state": self._state()}
-        return self._obs(), reward, False, self.t == c.horizon, info
+        return self._obs(), reward, self.t == c.horizon, False, info   # D8: terminated at T
 
 
 class ConstantPolicy:

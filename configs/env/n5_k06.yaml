@@ -1,7 +1,7 @@
-# capacity = round(kappa * O_ref), O_ref = 79 (PROVISIONAL order-up-to stand-in, configs/env/oref_provisional.json; remeasure with M2's (s,S)).
+# capacity = round(kappa * O_ref), O_ref = 80: unconstrained (s,S) on the tune paths picks (15, 16) = order-up-to (no fixed order cost), so 16 per SKU (DECISIONS 2026-11-23).
 n_skus: 5
 kappa: 0.6
-capacity: 47
+capacity: 48
 shelf_life: 3
 lead_time: 2
 horizon: 30
