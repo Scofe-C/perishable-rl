@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: silver_daily
+    description: One row per store, product and day (train + eval). Facts only.
+    data_tests:
+      - unique_combination: {arguments: {columns: [store_id, product_id, dt]}}
+      - expression_is_true: {arguments: {expression: "stockout_any_open = (stockout_hours_open > 0)"}}
+      - expression_is_true: {arguments: {expression: "sales_open <= sales + 1e-9"}}
+      - expression_is_true: {arguments: {expression: "stockout_hours_open <= stockout_hours_24"}}
+    columns:
+      - name: store_id
+        data_tests: [not_null]
+      - name: product_id
+        data_tests: [not_null]
+      - name: dt
+        data_tests: [not_null]
+      - name: split
+        data_tests:
+          - accepted_values: {arguments: {values: [train, eval]}}
+      - name: dow
+        data_tests:
+          - expect_between: {arguments: {min_value: 0, max_value: 6}}
+      - name: sales
+        data_tests:
+          - expect_between: {arguments: {min_value: 0}}
+      - name: stockout_hours_open
+        data_tests:
+          - expect_between: {arguments: {min_value: 0, max_value: 16}}
+
+  - name: silver_hour_profile
+    description: Share of open-hour demand per hour 6..21, per product (fallback category / all).
+    data_tests:
+      - unique_combination: {arguments: {columns: [product_id, hour]}}
+    columns:
+      - name: hour
+        data_tests:
+          - expect_between: {arguments: {min_value: 6, max_value: 21}}
+      - name: share
+        data_tests:
+          - expect_between: {arguments: {min_value: 0, max_value: 1}}
+      - name: level
+        data_tests:
+          - accepted_values: {arguments: {values: [product, category, all, uniform]}}
+
+  - name: silver_demand_m2
+    description: Method 2 recovered daily demand (hourly extrapolation inside open hours).
+    data_tests:
+      - unique_combination: {arguments: {columns: [store_id, product_id, dt]}}
+      - expression_is_true: {arguments: {expression: "demand_m2 is null or demand_m2 >= sales - 1e-9"}}
+      - expression_is_true: {arguments: {expression: "capped = (demand_m2 is null)"}}
+      - expression_is_true: {arguments: {expression: "stockout_hours_open > 0 or abs(demand_m2 - sales) < 1e-9"}}
+    columns:
+      - name: p_out
+        data_tests:
+          - expect_between: {arguments: {min_value: 0, max_value: 1.000001}}
+      - name: capped
+        data_tests: [not_null]

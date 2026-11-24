@@ -1,0 +1,50 @@
+# Personal data-engineering platform (Phase 2). Runs in Docker on Python 3.12, separate from the team's 3.15 env.
+# Talks to the team code only through files (Parquet). See docs/INFRA_PLAN.md.
+[project]
+name = "frn"
+version = "0.1.0"
+description = "FreshRetailNet-50K -> censored-demand parameters (C1 demand_params.parquet)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # Orchestration: matched dagster release pair (dagster-dbt needs Python < 3.14).
+    "dagster==1.13.29",
+    "dagster-webserver==1.13.29",
+    "dagster-dbt==0.29.29",
+    # Transformations + data tests: dbt 1.11 is the older minor that still gets patches; adapter of the same minor.
+    "dbt-core==1.11.17",
+    "dbt-duckdb==1.11.1",
+    # duckdb 1.5.x: last patch of the mature line (2.0 is 3 weeks old). Parquet is the interface, so the
+    # team env may use 2.0 while this one uses 1.5.
+    "duckdb==1.5.6",
+    "pyarrow==26.0.1",   # same as the team env
+    "numpy==2.5.4",
+    "scipy==1.18.1",     # censored-likelihood MLE
+    "pyyaml==6.0.3",       # configs (imported directly, so pinned here, not just via dagster)
+]
+
+[dependency-groups]
+dev = ["pytest==9.2.0", "ruff==0.17.5"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]   # same rules as the team repo
+
+[tool.ruff.lint.isort]
+known-first-party = ["frn"]  # explicit: auto-detection differed between checkouts
+
+[tool.ruff.lint.per-file-ignores]
+# BLAS thread limits must be set before numpy is imported (see the comment at the top of gold.py)
+"src/frn/gold.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "root_seed": 2026,
+  "params": {
+    "N": 5,
+    "lambda": [
+      4.0,
+      4.0,
+      4.0,
+      4.0,
+      4.0
+    ],
+    "season": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "T": 30,
+    "scenario": [
+      {
+        "kind": "overdispersed",
+        "start": [
+          0,
+          0
+        ],
+        "duration": 30,
+        "magnitude": 0.5,
+        "skus": null
+      }
+    ]
+  },
+  "files": {
+    "tune": {
+      "n_paths": 50,
+      "sha256": "427da6b074b67478245540f462e914624cdc515a87b78390a967e57cbc77f468"
+    },
+    "test": {
+      "n_paths": 100,
+      "sha256": "4c6380a9cbb6000958f0f9c2a418acdc78d48e3c1d5cc94bb12957e3e7982860"
+    }
+  }
+}

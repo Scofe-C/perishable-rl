@@ -1,7 +1,7 @@
-# PROVISIONAL: capacity = round(kappa * 20 * N) until O_ref is measured (SPEC §1.1, DECISIONS.md).
+# capacity = round(kappa * O_ref), O_ref = 79 (PROVISIONAL order-up-to stand-in, configs/env/oref_provisional.json; remeasure with M2's (s,S)).
 n_skus: 5
 kappa: 0.6
-capacity: 60
+capacity: 47
 shelf_life: 3
 lead_time: 2
 horizon: 30

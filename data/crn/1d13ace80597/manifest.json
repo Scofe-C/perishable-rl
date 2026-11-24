@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "root_seed": 2026,
+  "params": {
+    "N": 1,
+    "lambda": [
+      4.0
+    ],
+    "season": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "T": 30
+  },
+  "files": {
+    "tune": {
+      "n_paths": 50,
+      "sha256": "0f331a46f6695e23bea9b5c52723f2d9aed8e2d227360bc4b315eac7c3a19f7b"
+    },
+    "test": {
+      "n_paths": 100,
+      "sha256": "77c6f8bbd54552b52ae21aa3c537d3af28dfedcf6195f8f40ab5614d7fc8be46"
+    }
+  }
+}

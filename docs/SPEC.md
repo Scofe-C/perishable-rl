@@ -1,98 +1,116 @@
 # SPEC — shared contracts
 
-> **Status: DRAFT, not yet ratified.** All three members review it in the week-1 meeting. After that
-> it is frozen. From then on, any change needs approval from all three (CODEOWNERS) and an entry in
-> [DECISIONS.md](DECISIONS.md).
+> **Status: DRAFT.** Decisions D1–D7 (2026-11-22, [DECISIONS.md](DECISIONS.md)) are written in below and wait
+> for team confirmation. Once ratified, any change needs all three members and a DECISIONS.md entry.
 >
-> Every algorithm, baseline and the DP depend on this file. If the env and the DP read it
-> differently, both test suites can pass while the comparison is silently wrong.
+> The env, the DP and every agent depend on this file. If the env and the DP read it differently, both
+> test suites can pass while the comparison is silently wrong.
 
 ## 1. Parameters
 
-| Symbol | Meaning | Default (PROPOSED) |
+| Symbol | Meaning | Default (proposed) |
 |---|---|---|
 | N | number of SKUs | 1, 2, 5 (core); 10, 20 (extension) |
-| C | shared capacity, units, summed over SKUs | derived from κ (§1.1) |
+| C | shared capacity in units, summed over SKUs | from κ (§1.1) |
 | L | shelf life in days (age buckets) | 3 |
 | τ | lead time in days, τ ≥ 1; P = τ pipeline slots | 2 |
 | λ_i | mean daily Poisson demand of SKU i | 4 |
 | season[0..6] | day-of-week multipliers (mean 1) | all 1 (off) |
 | T | horizon in days | 30 |
-| p_i | sale price per unit | 10 |
-| c_i | ordering cost per unit | 4 |
-| h_i | holding cost per unit per day | 0.1 |
-| w_i | expiry penalty per expired unit (on top of c_i already paid) | 2 |
-| b_i | lost-sales penalty per unit of unmet demand | 2 |
+| p, c, h, w, b | price, order cost, holding cost/day, expiry penalty (on top of c), lost-sales penalty, per unit | 10, 4, 0.1, 2, 2 |
 | γ | discount | 1 (finite horizon, undiscounted) |
 
 ### 1.1 Capacity tightness κ
-`C = round(κ · O_ref)`. `O_ref` is the mean total occupancy (on hand + in transit + new orders) of
-the unconstrained (s,S) policy on the `tune` paths. **Week 1 TODO:** measure O_ref per N and record
-it in DECISIONS.md. κ ∈ {0.6, 1.0}.
+`C = round(κ · O_ref)`, with κ ∈ {0.6, 1.0}. O_ref is the mean total occupancy (on hand + in transit + new
+orders) of the unconstrained (s,S) policy on the `tune` paths. Until M2's (s,S) exists, O_ref is measured
+with a provisional order-up-to stand-in (`scripts/measure_oref.py` → `configs/env/oref_provisional.json`):
+O_ref = 16 / 32 / 79 for N = 1 / 2 / 5 at λ = 4, so C = 10/16, 19/32, 47/79 for κ = 0.6/1.0. Calibrated configs
+take one capacity for m1 and m3 from the m3 (censored MLE) world's O_ref.
 
 ## 2. State
 At the start of day t:
-- `inv[N, L]`: on-hand stock by remaining shelf life. Index 0 expires at the end of today, and index L−1 is the freshest.
-- `pipe[N, P]` with P = τ: orders placed on days t−τ … t−1. `pipe[:, 0]` arrives today.
-- `t` (0 … T−1), from which day-of-week = `t mod 7`.
+- `inv[N, L]`: on-hand stock by remaining shelf life. Index 0 expires at the end of today; L−1 is the freshest.
+- `pipe[N, P]`: orders placed on days t−τ … t−1. `pipe[:, 0]` arrives today.
+- `t` (0 … T−1); day of week = `t mod 7`.
 
-Occupancy is `occ = sum(inv) + sum(pipe)`. Today's arrival still counts as in transit.
+Occupancy `occ = sum(inv) + sum(pipe)`. Today's arrival still counts as in transit.
+
+At decision time `inv[:, L−1]` is always 0: arrivals enter it in step 2, and step 4 empties it. The DP state is
+therefore `(inv[:, :L−1], pipe)` with `occ ≤ C`, which gives **C(C+L−1+P, L−1+P)** states for N=1 (C=20, L=3,
+P=2: 10,626).
 
 ## 3. Event order within day t (the single source of truth)
-1. **Decide.** Observe the state and choose the integer order `q[N] ≥ 0`.
-   The order is feasible iff `occ + sum(q) ≤ C`.
-   If it is infeasible, the env **clips** it to the remaining capacity `R = C − occ`, removing units
-   from the largest orders first, and sets `info["clipped"] = True`.
-2. **Arrive.** `inv[:, L-1] += pipe[:, 0]`.
-3. **Demand.** Draw `d_i ~ Poisson(λ_i · season[t mod 7])`, or read it from the CRN path. Issue it
-   FIFO from bucket 0 upward. `sold = min(d, sum(inv))` and `lost = d − sold`.
-4. **Expire.** The remaining `inv[:, 0]` becomes `expired`. Shift ages so that `inv[:, k] ← inv[:, k+1]` and `inv[:, L-1] ← 0`.
+1. **Decide.** Observe the state and choose integer orders `q[N] ≥ 0`. Feasible iff `occ + sum(q) ≤ C`.
+   If infeasible, the env clips (D2) and sets `info["clipped"] = True`:
+   ```
+   R = C − occ
+   while sum(q) > R:
+       i = argmax(q)          # ties: the lowest SKU index
+       q[i] −= 1
+   ```
+2. **Arrive.** `inv[:, L−1] += pipe[:, 0]`.
+3. **Demand.** `d_i ~ Poisson(λ_i · season[t mod 7])`, or read from the CRN path. Issue FIFO from bucket 0
+   upward. `sold = min(d, sum(inv))`, `lost = d − sold`.
+4. **Expire.** The remaining `inv[:, 0]` is `expired`. Shift ages: `inv[:, k] ← inv[:, k+1]`, `inv[:, L−1] ← 0`.
 5. **Hold.** `held = sum(inv)` after expiry.
-6. **Pipeline.** Shift `pipe[:, k] ← pipe[:, k+1]` and set `pipe[:, P-1] ← q`.
+6. **Pipeline.** Shift `pipe[:, k] ← pipe[:, k+1]`, set `pipe[:, P−1] ← q`.
 7. **Reward.** `r = Σ_i [p·sold − c·q − h·held − w·expired − b·lost]`.
-8. `t ← t+1`. The episode is **truncated** at `t = T`, never terminated. There is no salvage value for leftover stock.
+8. `t ← t+1`. At `t = T` the episode is **truncated** (`truncated=True`); it is never terminated. No salvage value.
 
-Initial state (PROPOSED): `inv = 0, pipe = 0`. Revisit if the cold-start days distort results.
+- **Initial state (D4, warm start):** `inv = 0`, `pipe[i, k] = floor(λ_i · season[k] + 0.5)` (slot k arrives on
+  day k). If that exceeds C, units are removed with the clipping rule over the flattened pipe (ties: lowest SKU,
+  then lowest slot). One implementation: `perinv.env.dynamics.initial_state`. An empty start would force stockouts
+  for τ days (≈ 15–18 % of the optimal profit).
+- **Demand without a CRN path (D5):** `reset()` without `options["demand_path"]` draws each day's demand from
+  `self.np_random` (seeded by `reset(seed=...)`). This is the training mode.
 
 ## 4. Action mappings
 
-### 4.1 Box (PPO, A2C, SAC): one shared wrapper `CapacityShareAction`
-- `action ∈ Box(-1, 1, shape=(N+1,))`
-- `R = C − occ`
-- `share = sigmoid(4 · a[0])`. The ×4 is required: a raw `sigmoid(a)` stays in [0.27, 0.73].
+### 4.0 Base env (D6)
+`action_space = MultiDiscrete([C+1] * N)`: the integer orders `q[N]`, clipped as in §3.
+
+### 4.1 Box (PPO, A2C, SAC): one shared wrapper `CapacityShareAction` (D1)
+- `action ∈ Box(-1, 1, shape=(N+1,))`, `R = C − occ`
+- `share = (σ(4·a[0]) − σ(−4)) / (σ(4) − σ(−4))`. This rescaled sigmoid maps a[0] = −1 to exactly 0 and +1 to
+  exactly 1, for every R. The plain `σ(4·a[0])` fails both endpoints from R = 28 (measured), and a raw
+  `σ(a)` would stay in [0.27, 0.73].
 - `total = clip(floor(share · R + 0.5), 0, R)`
-- `w = softmax(a[1:])`, and `q` = largest-remainder rounding of `w · total`, so `sum(q) == total` exactly.
-- Required: `a[0] = −1 → total = 0` and `a[0] = +1 → total = R` after rounding. Make sure the ×4 actually achieves this; if it doesn't, raise the scale and record the change in DECISIONS.md.
+- `w = softmax(4 · a[1:])` (D7: plain softmax on [−1, 1] caps one SKU at 65 % for N = 5); `q` = largest-remainder
+  rounding of `w · total` (leftover units to the largest fractions, ties to the lowest index), so `sum(q) == total`.
+- Implemented once as `perinv.env.wrappers.capacity_share_orders(a, R)`; the SB3 adapter reuses it.
 
-### 4.2 Discrete (DQN, MaskablePPO), N = 1 only
-- `action ∈ Discrete(C + 1)`, and `q = action`.
-- The env exposes `action_masks() -> bool[C+1]` where mask[k] is `k ≤ R`. It lives on the env, not
-  on a wrapper, so it works under SubprocVecEnv.
-- DQN has no masks, so it relies on clipping (§3.1). Clipped-step frequency is logged.
+### 4.2 Discrete (DQN, MaskablePPO), N = 1 only: wrapper `DiscreteOrder`
+- `action ∈ Discrete(C + 1)`, `q = [action]`.
+- The env (not a wrapper) exposes `action_masks() -> bool[C+1]`, mask[k] = `k ≤ R`, so it works under
+  SubprocVecEnv. DQN has no masks and relies on clipping; the clipped-day count is logged.
 
-## 5. Observation (PROPOSED)
-`obs = concat(inv.flatten() / C, pipe.flatten() / C, onehot(t mod 7), [t / T], [occ / C])` as float32.
-Algorithms may add VecNormalize on top. The raw state is always available in `info["state"]`.
+## 5. Observation (proposed)
+`obs = concat(inv.flatten() / C, pipe.flatten() / C, onehot(t mod 7), [t / T], [occ / C])`, float32.
+Algorithms may add VecNormalize. The raw state is always in `info["state"]`.
 
-## 6. `info` dict from `step()`
-`sold, demand, lost, expired, ordered, held, occupancy, clipped, reward_breakdown{revenue, ordering,
-holding, expiry, lost_sales}, state{inv, pipe, t}`
+## 6. `info` from `reset()` and `step()`
+- `reset()`: `state{inv, pipe, t}`.
+- `step()`: per-SKU arrays `sold, demand, lost, expired, ordered, held`; `occupancy` = decision-time
+  occupancy, before the order (D3); `clipped`; `reward_breakdown{revenue, ordering, holding, expiry,
+  lost_sales}`; `state{inv, pipe, t}` after the step.
+- `perinv.env.dynamics.EVENT_ORDER_VERSION` changes whenever §3 changes (it is part of `train_key`).
 
 ## 7. CRN demand paths
 - Location: `data/crn/<demand_hash>/{tune,test}.npz` + `manifest.json`.
-- `demand_hash` is the sha256 of the canonical JSON of `{N, lambda, season, T}`, first 12 hex characters.
-- npz arrays: `demand: int32[n_paths, T, N]` and `path_seed: int64[n_paths]`.
-- Path k of split s is drawn with `np.random.default_rng([root_seed, SPLIT_ID[s], k])`, where `SPLIT_ID = {tune: 0, test: 1}`. The two splits never overlap.
-- Sizes: `tune` = 50 paths (hyperparameter tuning and (s,S) grid search) and `test` = 100 paths (final evaluation only).
-- `manifest.json` records the params, `root_seed`, `version`, and the sha256 of each npz file.
-- Evaluation: `env.reset(options={"demand_path": demand[k]})`. Stochastic policies and random baselines are seeded with `k`.
+- `demand_hash` = first 12 hex characters of the sha256 of the canonical JSON of `{N, lambda, season, T}`
+  (plus `scenario` when set; see `perinv.data.scenarios`).
+- npz arrays: `demand: int32[n_paths, T, N]`, `path_seed: int64[n_paths]`.
+- Path k of split s is drawn with `np.random.default_rng([root_seed, SPLIT_ID[s], k])`, `SPLIT_ID = {tune: 0,
+  test: 1}`, so the splits never overlap.
+- Sizes: `tune` = 50 paths (tuning and (s,S) grid search), `test` = 100 paths (final evaluation only).
+- Evaluation: `env.reset(options={"demand_path": demand[k]})`; stochastic policies are seeded with k.
 
 ## 8. Policy interface
 ```python
 class Policy(Protocol):
     def reset(self) -> None: ...
-    def act(self, obs: np.ndarray, info: dict) -> np.ndarray: ...  # int64[N], feasible
+    def act(self, obs: np.ndarray, info: dict) -> np.ndarray: ...  # int64[N] order quantities
 ```
-Every agent goes through the same `evaluate()`: DP, (s,S), newsvendor, and SB3 models (with frozen
-VecNormalize: `training=False, norm_reward=False`, `deterministic=True`, and masks applied for
-MaskablePPO).
+Every agent goes through the same `evaluate()`: DP, (s,S), newsvendor and SB3 models (frozen VecNormalize:
+`training=False, norm_reward=False`; `deterministic=True`; masks applied for MaskablePPO). `evaluate()` rejects
+actions that are not N whole, finite, non-negative numbers. Orders above R are legal; the env clips them.

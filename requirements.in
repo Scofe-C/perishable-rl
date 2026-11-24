@@ -8,6 +8,7 @@ numpy
 scipy
 pandas
 pyarrow
+duckdb  # 2.0+ is the first release with Python 3.15 wheels (abi3); queries the eval warehouse
 optuna
 # rliable dropped: needs arch<8, which breaks on pandas 3 (the only pandas for Python 3.15). IQM + CI via scipy.
 matplotlib

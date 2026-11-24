@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+from perinv.data.scenarios import SHOCK_STREAM, apply_shocks
 from perinv.env.config import EnvConfig
 
 FORMAT_VERSION = 1
@@ -19,12 +20,19 @@ DEFAULT_SIZES = {"tune": 50, "test": 100}
 
 
 def generate_paths(cfg: EnvConfig, split: str, n_paths: int, root_seed: int) -> np.ndarray:
-    """int32[n_paths, T, N]. Path k depends only on (root_seed, split, k), never on n_paths."""
+    """int32[n_paths, T, N]. Path k depends only on (root_seed, split, k), never on n_paths.
+
+    With a scenario, path k is the base path k plus the shocks, drawn from a separate rng stream
+    (perinv.data.scenarios), so it stays paired with the unshocked path k.
+    """
     lam = np.asarray(cfg.demand_mean)[None, :] * np.asarray(cfg.season)[np.arange(cfg.horizon) % 7, None]
     out = np.empty((n_paths, cfg.horizon, cfg.n_skus), dtype=np.int32)
     for k in range(n_paths):
         rng = np.random.default_rng([root_seed, SPLIT_ID[split], k])
         out[k] = rng.poisson(lam)
+        if cfg.scenario:
+            shock_rng = np.random.default_rng([root_seed, SPLIT_ID[split], k, SHOCK_STREAM])
+            out[k] = apply_shocks(out[k], lam, cfg.scenario, shock_rng)
     return out
 
 
@@ -45,7 +53,7 @@ def write_paths(cfg: EnvConfig, root: str | Path = "data/crn", root_seed: int = 
         files[split] = {"n_paths": n, "sha256": _sha256(f)}
     manifest = {"version": FORMAT_VERSION, "root_seed": root_seed,
                 "params": cfg.demand_params(), "files": files}
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out_dir
 
 

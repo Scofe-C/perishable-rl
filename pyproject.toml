@@ -11,12 +11,18 @@ requires-python = ">=3.15"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+perinv = ["eval/sql/*.sql"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["perinv"]  # explicit: auto-detection differed between checkouts
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

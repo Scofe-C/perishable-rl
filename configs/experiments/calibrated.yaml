@@ -1,0 +1,33 @@
+# Group D (docs/EXPERIMENTS.md, plan question 4): the same real SKUs, demand calibrated two ways.
+#   m1 = method 1 (drop stockout days)        m3 = method 3 (censored MLE, the better estimate)
+# Configs: scripts/make_calibrated_configs.py. CRN paths: scripts/make_crn_paths.py configs/env/calibrated/*.yaml
+#
+#   D1   build on m1, evaluate on m1      (what you would *think* you earn)
+#   D3   build on m3, evaluate on m3      (best case)
+#   D13  build on m1, evaluate on m3      (what you *actually* earn with the biased calibration)
+# Calibration cost = metrics.paired_groups(con, "D13", "D3"): same policy and seed, same m3 test paths.
+# D13 reuses D1's trained models (same train_key), so cross-evaluation costs no extra training.
+#
+# DP1 / DP3 / DP13: the same design at N = 1 with the exact DP (no training noise; needs M1's DP builder).
+budget: configs/budget.yaml
+groups:
+  D1:
+    envs: [configs/env/calibrated/frn_m1_n5_k06.yaml]
+    policies: [ppo, {name: ss, seeds: [0]}, {name: newsvendor, seeds: [0]}]
+  D3:
+    envs: [configs/env/calibrated/frn_m3_n5_k06.yaml]
+    policies: [ppo, {name: ss, seeds: [0]}, {name: newsvendor, seeds: [0]}]
+  D13:
+    envs: [configs/env/calibrated/frn_m1_n5_k06.yaml]
+    eval_envs: [configs/env/calibrated/frn_m3_n5_k06.yaml]
+    policies: [ppo, {name: ss, seeds: [0]}, {name: newsvendor, seeds: [0]}]
+  DP1:
+    envs: [configs/env/calibrated/frn_m1_n1_k06.yaml]
+    policies: [{name: dp, seeds: [0]}]
+  DP3:
+    envs: [configs/env/calibrated/frn_m3_n1_k06.yaml]
+    policies: [{name: dp, seeds: [0]}]
+  DP13:
+    envs: [configs/env/calibrated/frn_m1_n1_k06.yaml]
+    eval_envs: [configs/env/calibrated/frn_m3_n1_k06.yaml]
+    policies: [{name: dp, seeds: [0]}]

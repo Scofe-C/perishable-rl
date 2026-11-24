@@ -1,0 +1,9 @@
+version: 2
+sources:
+  - name: bronze
+    description: Typed FreshRetailNet rows from frn.bronze (one row per store, product, day).
+    meta:
+      external_location: "{{ var('data_root') }}/bronze/{{ var('revision') }}/{name}.parquet"
+    tables:
+      - name: train
+      - name: eval

@@ -1,0 +1,9 @@
+frn:
+  target: build
+  outputs:
+    build:
+      type: duckdb
+      path: "{{ env_var('FRN_DBT_DB') }}"   # a throwaway DuckDB file inside the staging folder
+      threads: 4
+      settings:
+        memory_limit: "4GB"
