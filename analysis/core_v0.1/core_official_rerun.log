@@ -1,0 +1,8 @@
+2026-11-24 19:37:54,708 INFO perinv.runner: 124 jobs: 6 to run, 118 skipped or blocked
+2026-11-24 19:38:07,726 INFO perinv.runner: done B-N2-k0.6-ss-s0: mean profit 922.69
+2026-11-24 19:38:24,655 INFO perinv.runner: done B-N2-k1-ss-s0: mean profit 1237.95
+2026-11-24 19:51:13,061 INFO perinv.runner: done B-N5-k1-sac-s2: mean profit 3275.27
+2026-11-24 19:51:17,233 INFO perinv.runner: done B-N5-k1-sac-s1: mean profit 3269.80
+2026-11-24 19:51:19,017 INFO perinv.runner: done B-N5-k1-sac-s4: mean profit 3272.37
+2026-11-24 19:51:19,457 INFO perinv.runner: done B-N5-k1-sac-s3: mean profit 3284.01
+done=6 failed=0 skipped/blocked=118

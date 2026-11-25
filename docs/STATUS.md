@@ -4,18 +4,19 @@
 > Agents: read this first, then [SPEC.md](SPEC.md). Project summary: [README.md](../README.md).
 
 **Last updated:** 2026-11-23 · **Phase:** Week 2. **Deadline: everything due Dec 6.** All code for the core
-experiments exists; tuning is done (configs/tuned/, 22 files).
+experiments exists; core results are in analysis/core_v0.1/.
 
 ## Current step
-**Final runs** (`core.yaml --official`), then the analysis. Tuning finished on 2026-11-23 (History). M2 code, the review fixes and the
+**Report writing** from `analysis/core_v0.1/` (README there has the numbers and caveats). Tuning, the official
+core runs and the analysis are done (History). Optional groups (`calibrated.yaml`, `shocks.yaml`) only if time remains. M2 code, the review fixes and the
 smoke run landed on 2026-11-23 (History).
 
 Run order (each command skips what is already done):
 1. [done] `python -m perinv.train.tune --algos sac,ppo,a2c,maskppo,dqn --envs configs/env/n{1,2,5}_k{06,10}.yaml --jobs 8`
    → `configs/tuned/<algo>-<env>.yaml` + `results/tune/*.csv`. Commit the tuned files.
-2. Tag the frozen env: `git tag v0.1-frozen-env` (env, SPEC, budget, tuned hparams). Any later env change = rerun.
-3. `python scripts/run_matrix.py configs/experiments/core.yaml --jobs 8 --official` (clean tree required).
-4. `python scripts/analyze.py` → `results/` tables and figures for the report.
+2. [done] Tag the frozen env: `git tag v0.1-frozen-env` (env, SPEC, budget, tuned hparams). Any later env change = rerun.
+3. [done] `python scripts/run_matrix.py configs/experiments/core.yaml --jobs 8 --official` (clean tree required).
+4. [done] `python scripts/analyze.py` → `results/` tables and figures for the report.
 5. Optional, only if time remains: `calibrated.yaml` (group D), `shocks.yaml`.
 
 Open team decisions (DECISIONS.md "team to confirm"): D1–D8, the 500k budget, the N=5 capacity 80/48, the M2
@@ -56,6 +57,11 @@ Platform notes:
 - SubprocVecEnv and the runner use spawn: always run real script files with an `if __name__ == "__main__":` guard.
 
 ## History
+- 2026-11-24 (Weibo): **Core results.** 124/124 official runs (ed56d2c, 12.2 CPU-h) and the analysis
+  (`scripts/analyze.py` now writes q1 % of DP, q2 paired vs best heuristic, q3 efficiency + learning curves); copied
+  to `analysis/core_v0.1/`. SAC ≥ 99.5 % of DP at N = 1 and ≈ +5 % over the best heuristic at every N; PPO +3–5 %;
+  A2C collapses to a fixed policy and falls to 96 % of the heuristic at N = 5. The laptop slept ≈ 9 h mid-run; 6 jobs
+  were refused by the dirty-tree check (an uncommitted edit) and rerun clean.
 - 2026-11-23 (Weibo): **Tuning done** at 500k steps, 10 trials, 22 algorithm × cell pairs, 8 jobs, 2 h 40 m on an M5
   Mac; no failures. Best tune-path profit (SAC / PPO / A2C): n1_k06 506.2 / 505.7 / 480.4, n1_k10 667.0 / 662.8 /
   624.5, n2_k06 972.1 / 964.4 / 918.6, n2_k10 1340.6 / 1319.8 / 1246.3, n5_k06 2472.6 / 2446.4 / 2328.6, n5_k10
