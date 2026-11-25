@@ -19,6 +19,7 @@ from pathlib import Path
 import matplotlib
 import numpy as np
 import pandas as pd
+import yaml
 
 matplotlib.use("Agg")  # files only, no display needed (cloud VMs, CI)
 import matplotlib.pyplot as plt  # noqa: E402
@@ -69,12 +70,14 @@ def q1_pct_of_dp(runs: pd.DataFrame) -> pd.DataFrame:
         rows.append({"n_skus": n, "kappa": k, "policy": pol} | _ci(100 * g.pct_of_dp)
                     | {"mean_profit": g.mean_profit.mean(), "waste_rate": g.waste_rate.mean(),
                        "fill_rate": g.fill_rate.mean()})
-    return pd.DataFrame(rows).sort_values(["kappa", "iqm"], ascending=[True, False])
+    return pd.DataFrame(rows).sort_values(["kappa", "iqm", "policy"], ascending=[True, False, True])
 
 
 def q2_vs_best_heuristic(con, summary: pd.DataFrame) -> pd.DataFrame:
     """Per cell, the stronger heuristic (by test profit) is the reference; each RL seed is paired path by path."""
     h = summary[summary.policy.isin(HEURISTICS)]
+    if h.empty:
+        return pd.DataFrame()
     best = h.loc[h.groupby(["group", "n_skus", "kappa"]).mean_profit.idxmax()].set_index(["n_skus", "kappa"])
     rows = []
     for pol in RL:
@@ -83,7 +86,7 @@ def q2_vs_best_heuristic(con, summary: pd.DataFrame) -> pd.DataFrame:
             if d.empty:
                 continue
             for (n, k), g in d.groupby(["n_skus", "kappa"]):
-                if best.loc[(n, k), "policy"] != base:
+                if (n, k) not in best.index or best.loc[(n, k), "policy"] != base:
                     continue
                 ref = best.loc[(n, k), "mean_profit"]
                 seeds_sig = int(((g.low > 0) | (g.high < 0)).sum())
@@ -91,7 +94,7 @@ def q2_vs_best_heuristic(con, summary: pd.DataFrame) -> pd.DataFrame:
                             | {f"diff_{key}": v for key, v in _ci(g.mean_diff).items()}
                             | {"pct_of_reference": 100 * (1 + _ci(g.mean_diff)["iqm"] / ref),
                                "seeds_ci_excludes_0": seeds_sig, "seeds_better": int((g.low > 0).sum())})
-    return pd.DataFrame(rows).sort_values(["n_skus", "kappa", "policy"])
+    return pd.DataFrame(rows).sort_values(["n_skus", "kappa", "policy"]) if rows else pd.DataFrame()
 
 
 def plot_q2(q2: pd.DataFrame, out: Path) -> Path:
@@ -124,8 +127,9 @@ def learning_curves(runs: pd.DataFrame, runs_root: Path) -> pd.DataFrame:
     for r in runs[runs.policy.isin(RL)].itertuples():
         f = runs_root / r.run_name / "learning_curve.csv"
         if f.exists():
-            c = pd.read_csv(f)
-            frames.append(c.assign(policy=r.policy, n_skus=r.n_skus, kappa=r.kappa, seed=r.seed))
+            env_path = yaml.safe_load((f.parent / "config.yaml").read_text())["env_path"]
+            frames.append(pd.read_csv(f).assign(policy=r.policy, n_skus=r.n_skus, kappa=r.kappa, seed=r.seed,
+                                                env_path=env_path))
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
@@ -176,7 +180,7 @@ def plot_q3(curves: pd.DataFrame, refs: pd.DataFrame, out: Path) -> list[Path]:
     return written
 
 
-def reference_tune_profit(runs: pd.DataFrame, configs_root: Path, crn_root: str) -> pd.DataFrame:
+def reference_tune_profit(curves: pd.DataFrame, crn_root: str) -> pd.DataFrame:
     """DP (N = 1) and the heuristics scored on the tune paths, as reference lines for the learning curves."""
     from perinv.baselines import dp_policy, newsvendor, s_S
     from perinv.data.crn import load_paths
@@ -185,8 +189,8 @@ def reference_tune_profit(runs: pd.DataFrame, configs_root: Path, crn_root: str)
     from perinv.eval.evaluate import evaluate
 
     rows = []
-    for (n, k), _ in runs.groupby(["n_skus", "kappa"]):
-        cfg = load_env_config(configs_root / "env" / f"n{n}_k{round(10 * k):02d}.yaml")
+    for (n, k, env_path), _ in curves.groupby(["n_skus", "kappa", "env_path"]):   # the RL runs' build worlds
+        cfg = load_env_config(env_path)
         env, tune = PerishableInventoryEnv(cfg), load_paths(cfg, "tune", crn_root)
         pols = {"newsvendor": newsvendor.NewsvendorPolicy(cfg)}
         if n == 1:
@@ -203,7 +207,6 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs-root", default="runs")
     ap.add_argument("--out", default="results")
-    ap.add_argument("--configs-root", default="configs")
     ap.add_argument("--crn-root", default="data/crn")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -223,11 +226,12 @@ def main() -> int:
     q1_pct_of_dp(runs).to_csv(out / "q1_pct_of_dp.csv", index=False)
     q2 = q2_vs_best_heuristic(con, summary)
     q2.to_csv(out / "q2_vs_best_heuristic.csv", index=False)
-    figs.append(plot_q2(q2, out))
+    if not q2.empty:
+        figs.append(plot_q2(q2, out))
     curves = learning_curves(runs, Path(args.runs_root))
-    q3_efficiency(runs, curves).to_csv(out / "q3_efficiency.csv", index=False)
-    refs = reference_tune_profit(runs, Path(args.configs_root), args.crn_root)
-    figs += plot_q3(curves, refs, out)
+    if not curves.empty:   # only trained RL runs write learning curves
+        q3_efficiency(runs, curves).to_csv(out / "q3_efficiency.csv", index=False)
+        figs += plot_q3(curves, reference_tune_profit(curves, args.crn_root), out)
     print(f"{len(runs)} runs -> {out}: runs.csv, summary.csv, q1-q3 tables, {len(figs)} figure(s)")
     return 0
 
